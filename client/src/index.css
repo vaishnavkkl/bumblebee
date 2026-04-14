@@ -705,11 +705,13 @@ tbody tr:hover { background: var(--bg-hover); }
 
 .vehicle-type-card img {
   mix-blend-mode: multiply;
+  filter: contrast(1.1) brightness(1.05);
   transition: transform 0.3s ease;
 }
 
 [data-theme="dark"] .vehicle-type-card img {
-  mix-blend-mode: normal; /* Blending multiply doesn't work well on dark backgrounds */
+  mix-blend-mode: screen; 
+  filter: contrast(1.2) brightness(0.9);
 }
 
 .vehicle-type-card:hover img {

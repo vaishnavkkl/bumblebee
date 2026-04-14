@@ -13,6 +13,7 @@ import Attendance from './pages/Attendance';
 import WorkingHours from './pages/WorkingHours';
 import Salary from './pages/Salary';
 import CustomerAnalytics from './pages/CustomerAnalytics';
+import SecurityData from './pages/SecurityData';
 
 function ProtectedRoute({ children, adminOnly = false }) {
   const { user, loading, isAdmin } = useAuth();
@@ -41,6 +42,7 @@ export default function App() {
         <Route path="employees/hours" element={<ProtectedRoute adminOnly><WorkingHours /></ProtectedRoute>} />
         <Route path="employees/salary" element={<ProtectedRoute adminOnly><Salary /></ProtectedRoute>} />
         <Route path="analytics/customers" element={<ProtectedRoute adminOnly><CustomerAnalytics /></ProtectedRoute>} />
+        <Route path="admin/security" element={<ProtectedRoute adminOnly><SecurityData /></ProtectedRoute>} />
       </Route>
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>

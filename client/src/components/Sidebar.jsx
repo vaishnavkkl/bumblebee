@@ -1,6 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { HiOutlineHome, HiOutlineDocumentText, HiOutlineClock, HiOutlineCurrencyRupee, HiOutlineUserGroup, HiOutlineTruck, HiOutlineClipboardList, HiOutlineChartBar, HiOutlineCash, HiOutlineCalendar } from 'react-icons/hi';
+import { HiOutlineHome, HiOutlineDocumentText, HiOutlineClock, HiOutlineCurrencyRupee, HiOutlineUserGroup, HiOutlineTruck, HiOutlineClipboardList, HiOutlineChartBar, HiOutlineCash, HiOutlineCalendar, HiOutlineShieldCheck } from 'react-icons/hi';
 
 export default function Sidebar() {
   const { isAdmin } = useAuth();
@@ -22,7 +22,7 @@ export default function Sidebar() {
         {isAdmin && (
           <div className="nav-section">
             <div className="nav-section-title">Overview</div>
-            <NavLink to="/" className={isActive('/')}>
+            <NavLink to="/" end className={isActive('/')}>
               <span className="nav-icon"><HiOutlineHome /></span> Dashboard
             </NavLink>
           </div>
@@ -69,7 +69,7 @@ export default function Sidebar() {
         <div className="nav-section">
           <div className="nav-section-title">Employees</div>
           {isAdmin && (
-            <NavLink to="/employees" className={isActive('/employees')}>
+            <NavLink to="/employees" end className={isActive('/employees')}>
               <span className="nav-icon"><HiOutlineUserGroup /></span> Manage
             </NavLink>
           )}
@@ -87,6 +87,15 @@ export default function Sidebar() {
             </>
           )}
         </div>
+
+        {isAdmin && (
+          <div className="nav-section">
+            <div className="nav-section-title">System</div>
+            <NavLink to="/admin/security" className={isActive('/admin/security')}>
+              <span className="nav-icon"><HiOutlineShieldCheck /></span> Security & Data
+            </NavLink>
+          </div>
+        )}
       </nav>
     </aside>
   );
