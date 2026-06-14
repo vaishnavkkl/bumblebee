@@ -39,8 +39,15 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
+  const updateUser = (newToken, newUser) => {
+    localStorage.setItem('bb-token', newToken);
+    api.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
+    setToken(newToken);
+    setUser(newUser);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, logout, isAdmin: user?.role === 'admin' }}>
+    <AuthContext.Provider value={{ user, token, loading, login, logout, updateUser, isAdmin: user?.role === 'admin' }}>
       {children}
     </AuthContext.Provider>
   );

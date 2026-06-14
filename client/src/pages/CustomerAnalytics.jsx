@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import api from '../utils/api';
 import { Toaster } from 'react-hot-toast';
 import { SkeletonRow } from '../components/Loaders';
+import Pagination from '../components/Pagination';
 import {
   HiOutlineUserGroup, HiOutlineTrendingUp, HiOutlineCurrencyRupee,
   HiOutlineFire, HiOutlineExclamation, HiOutlineX, HiOutlineStar,
@@ -45,20 +46,23 @@ export default function CustomerAnalytics() {
   const [frequency, setFrequency] = useState([]);
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [tableLoading, setTableLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
+  const [total, setTotal] = useState(0);
 
-  const load = () => {
+  // Load KPIs, charts (one-time, small aggregates — no pagination needed)
+  const loadCharts = () => {
     setLoading(true);
     Promise.allSettled([
-      api.get('/analytics/customers'),
       api.get('/analytics/customers/kpis'),
       api.get('/analytics/customers/trend'),
       api.get('/analytics/customers/top'),
       api.get('/analytics/customers/frequency'),
       api.get('/analytics/customers/services'),
-    ]).then(([c, k, t, top, f, s]) => {
-      if (c.status === 'fulfilled') setCustomers(c.value.data);
+    ]).then(([k, t, top, f, s]) => {
       if (k.status === 'fulfilled') setKpis(k.value.data);
       if (t.status === 'fulfilled') setTrend(t.value.data);
       if (top.status === 'fulfilled') setTopCustomers(top.value.data);
@@ -67,7 +71,22 @@ export default function CustomerAnalytics() {
     }).finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, []);
+  // Load paginated customer table
+  const loadTable = () => {
+    setTableLoading(true);
+    const params = new URLSearchParams({ page, limit, search, status: statusFilter });
+    api.get(`/analytics/customers?${params}`)
+      .then(r => {
+        setCustomers(r.data.data);
+        setTotal(r.data.total);
+      })
+      .finally(() => setTableLoading(false));
+  };
+
+  useEffect(() => { loadCharts(); }, []);
+  useEffect(() => { loadTable(); }, [page, limit, search, statusFilter]);
+
+  const load = () => { loadCharts(); loadTable(); };
 
   const getStatus = (lastVisit) => {
     const days = Math.floor((new Date() - new Date(lastVisit)) / 86400000);
@@ -80,19 +99,12 @@ export default function CustomerAnalytics() {
     ? Math.round((Number(kpis.repeat_customers) / Math.max(Number(kpis.total_tracked), 1)) * 100)
     : 0;
 
-  const filtered = customers.filter(c => {
-    const matchSearch = c.customer_mobile.includes(search);
-    const st = getStatus(c.last_visit).label;
-    const matchStatus = statusFilter === 'All' || st === statusFilter;
-    return matchSearch && matchStatus;
-  });
-
-  const statusCounts = customers.reduce((acc, c) => {
-    const st = getStatus(c.last_visit).label;
-    acc[st] = (acc[st] || 0) + 1;
-    return acc;
-  }, {});
-  const pieData = Object.entries(statusCounts).map(([name, value]) => ({ name, value }));
+  // Pie chart data from KPIs
+  const pieData = kpis ? [
+    { name: 'Active', value: Number(kpis.active_customers) },
+    { name: 'At Risk', value: Number(kpis.at_risk_customers) },
+    { name: 'Lost', value: Number(kpis.lost_customers) },
+  ].filter(d => d.value > 0) : [];
 
   return (
     <div className="fade-in">
@@ -246,15 +258,16 @@ export default function CustomerAnalytics() {
       <div className="filter-bar" style={{ marginBottom: 16 }}>
         <input
           type="text" className="form-control" placeholder="🔍 Search by mobile…"
-          value={search} onChange={e => setSearch(e.target.value)}
+          value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
           style={{ maxWidth: 260 }}
         />
         {['All', 'Active', 'At Risk', 'Lost'].map(s => (
-          <button key={s} onClick={() => setStatusFilter(s)}
+          <button key={s} onClick={() => { setStatusFilter(s); setPage(1); }}
             className={`btn btn-sm ${statusFilter === s ? 'btn-primary' : 'btn-secondary'}`}>
             {s}
           </button>
         ))}
+        {!tableLoading && <span style={{ color: 'var(--text-tertiary)', fontSize: '0.82rem' }}>{total} customers</span>}
       </div>
       <div className="table-container">
         <table>
@@ -271,12 +284,12 @@ export default function CustomerAnalytics() {
             </tr>
           </thead>
           <tbody>
-            {loading ? Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} cols={8} />) :
-              filtered.length === 0 ? (
+            {tableLoading ? Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} cols={8} />) :
+              customers.length === 0 ? (
                 <tr><td colSpan="8" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-tertiary)' }}>
-                  {customers.length === 0 ? 'No customer data yet. Start adding mobile numbers to bills.' : 'No customers match your filter.'}
+                  {total === 0 ? 'No customer data yet. Start adding mobile numbers to bills.' : 'No customers match your filter.'}
                 </td></tr>
-              ) : filtered.map((c, i) => {
+              ) : customers.map((c, i) => {
                 const { label, days } = getStatus(c.last_visit);
                 const badgeColor = label === 'Active' ? 'badge-green' : label === 'At Risk' ? 'badge-amber' : 'badge-red';
                 return (
@@ -299,7 +312,9 @@ export default function CustomerAnalytics() {
               })}
           </tbody>
         </table>
+        <Pagination page={page} total={total} limit={limit} onPageChange={setPage} onLimitChange={setLimit} />
       </div>
     </div>
   );
 }
+

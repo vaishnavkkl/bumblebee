@@ -5,6 +5,7 @@ import { useAlert } from '../context/AlertContext';
 import { useAuth } from '../context/AuthContext';
 import { BikeIcon, CarIcon, TruckIcon } from '../components/VehicleIcons';
 import { Spinner } from '../components/Loaders';
+import Pagination from '../components/Pagination';
 
 const statusColors = { in_progress: 'badge-blue', completed: 'badge-green' };
 const statusLabels = { in_progress: 'In Progress', completed: 'Completed' };
@@ -18,16 +19,20 @@ export default function VehicleStatus() {
   const [loading, setLoading] = useState(false);
   const [updatingId, setUpdatingId] = useState(null);
   const [filter, setFilter] = useState('all');
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
 
   const load = async () => {
     setLoading(true);
     try {
-      const params = filter === 'all' ? '' : `?status=${filter}`;
-      const r = await api.get(`/billing${params}`);
-      setBills(r.data);
+      const statusParam = filter === 'all' ? '' : `&status=${filter}`;
+      const r = await api.get(`/billing?page=${page}&limit=${limit}${statusParam}`);
+      setBills(r.data.data);
+      setTotal(r.data.total);
     } finally { setLoading(false); }
   };
-  useEffect(() => { load(); }, [filter]);
+  useEffect(() => { load(); }, [filter, page, limit]);
 
   const updateStatus = async (id, status, label) => {
     const ok = await confirm(`Mark this vehicle as "${label}"?`, { title: 'Update Status', confirmText: 'Update', variant: 'info', icon: '🚿' });
@@ -51,7 +56,7 @@ export default function VehicleStatus() {
 
       <div className="tabs">
         {['all', 'in_progress', 'completed'].map(s => (
-          <button key={s} className={`tab ${filter === s ? 'active' : ''}`} onClick={() => setFilter(s)}>
+          <button key={s} className={`tab ${filter === s ? 'active' : ''}`} onClick={() => { setFilter(s); setPage(1); }}>
             {s === 'all' ? 'All' : statusLabels[s]}
           </button>
         ))}
@@ -73,7 +78,6 @@ export default function VehicleStatus() {
       ) : (
         <div className="wash-board">
           {bills.map(b => {
-             // Calculate duration if completed
              let durationStr = null;
              if (b.wash_status === 'completed' && b.wash_completed_at) {
                const start = new Date(b.created_at).getTime();
@@ -89,11 +93,11 @@ export default function VehicleStatus() {
              return (
               <div key={b.id} className="wash-card">
                 <div className="wash-card-header">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
                     <div style={{ transform: 'scale(0.45)', transformOrigin: 'left center', width: 50, height: 30, overflow: 'hidden', flexShrink: 0 }}>
                       {vtMiniIcon[b.vehicle_type] ? (() => { const C = vtMiniIcon[b.vehicle_type]; return <C selected={b.wash_status === 'in_progress'} mini={true} />; })() : null}
                     </div>
-                    <strong>{b.vehicle_number || 'No plate'}</strong>
+                    <strong style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.2, wordBreak: 'break-word' }}>{b.vehicle_number || 'No plate'}</strong>
                   </div>
                   <span className={`badge ${statusColors[b.wash_status]}`}>{statusLabels[b.wash_status]}</span>
                 </div>
@@ -121,6 +125,7 @@ export default function VehicleStatus() {
           })}
         </div>
       )}
+      <Pagination page={page} total={total} limit={limit} onPageChange={setPage} onLimitChange={setLimit} />
     </div>
   );
 }

@@ -19,6 +19,6 @@ app.use('/api/system', require('./routes/system'));
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Bumblebee server running on port ${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Bumblebee server running on http://127.0.0.1:${PORT}`);
 });

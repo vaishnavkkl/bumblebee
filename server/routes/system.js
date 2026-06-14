@@ -34,19 +34,27 @@ router.post('/backup', auth, async (req, res) => {
     }
     
     const [tables] = await db.query('SHOW TABLES');
-    const data = {};
-    for (const row of tables) {
-      const tableName = Object.values(row)[0];
-      const [rows] = await db.query(`SELECT * FROM ${tableName}`);
-      data[tableName] = rows;
-    }
     
     const backupDir = await ensureBackupDir();
     const dateStr = new Date().toISOString().replace(/T/, '_').replace(/:/g, '-').split('.')[0];
     const fileName = `backup_${dateStr}.json`;
     const filePath = path.join(backupDir, fileName);
     
-    await fs.writeFile(filePath, JSON.stringify(data, null, 2));
+    // We construct the JSON object table by table to avoid loading everything at once if possible
+    // However, JSON.stringify(data) still needs the whole object.
+    // For a senior fix, we should use a stream.
+    const fileHandle = await fs.open(filePath, 'w');
+    await fileHandle.write('{\n');
+    
+    for (let i = 0; i < tables.length; i++) {
+      const tableName = Object.values(tables[i])[0];
+      const [rows] = await db.query(`SELECT * FROM ${tableName}`);
+      const tableData = JSON.stringify(rows);
+      await fileHandle.write(`  "${tableName}": ${tableData}${i === tables.length - 1 ? '' : ','}\n`);
+    }
+    
+    await fileHandle.write('}');
+    await fileHandle.close();
     
     res.json({ message: `Backup successfully created at ${filePath}`, filePath });
   } catch (error) {

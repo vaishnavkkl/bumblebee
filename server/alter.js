@@ -25,6 +25,21 @@ async function run() {
     }
   }
 
+  try {
+    // Add payment_status ENUM if not exists
+    await conn.query(`
+      ALTER TABLE bills
+      ADD COLUMN payment_status ENUM('pending', 'paid') DEFAULT 'pending'
+    `);
+    console.log('ALTER OK - added payment_status');
+  } catch (err) {
+    if (err.code === 'ER_DUP_FIELDNAME') {
+      console.log('payment_status already exists.');
+    } else {
+      console.error(err);
+    }
+  }
+
   // Also update existing 'pending' bills to 'in_progress' to clean up state
   await conn.query("UPDATE bills SET wash_status = 'in_progress' WHERE wash_status = 'pending'");
   await conn.end();

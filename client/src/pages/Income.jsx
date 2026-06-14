@@ -47,8 +47,9 @@ const PieTooltip = ({ active, payload }) => {
 
 export default function Income() {
   const [activeTab, setActiveTab] = useState('list'); // 'list' | 'report' | 'maintenance'
-  const [startDate, setStartDate] = useState(getISTDate(-30));
-  const [endDate, setEndDate] = useState(getISTDate(0));
+  const [startDate, setStartDate] = useState(getMonthRange().start);
+  const [endDate, setEndDate] = useState(getMonthRange().end);
+  const [filterType, setFilterType] = useState('all'); // 'all' | 'in_hand' | 'account' | 'pending'
 
   // Records state
   const [income, setIncome] = useState([]);
@@ -72,8 +73,9 @@ export default function Income() {
   const fetchRecords = useCallback(() => {
     setLoading(true);
     setChartLoading(true);
+    const typeParam = filterType !== 'all' ? `&type=${filterType}` : '';
     Promise.all([
-      api.get(`/finance/income?startDate=${startDate}&endDate=${endDate}`),
+      api.get(`/finance/income?startDate=${startDate}&endDate=${endDate}${typeParam}`),
       api.get(`/finance/income/daily?startDate=${startDate}&endDate=${endDate}`),
     ]).then(([listRes, chartRes]) => {
       setIncome(listRes.data);
@@ -81,9 +83,10 @@ export default function Income() {
         date: new Date(d.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
         'In Hand': Number(d.in_hand),
         Account: Number(d.account),
+        Pending: Number(d.pending || 0),
       })));
     }).catch(() => toast.error('Failed to load records')).finally(() => { setLoading(false); setChartLoading(false); });
-  }, [startDate, endDate]);
+  }, [startDate, endDate, filterType]);
 
   const fetchReport = useCallback(() => {
     setReportLoading(true);
@@ -99,9 +102,10 @@ export default function Income() {
     else if (activeTab === 'report') fetchReport();
   }, [activeTab, startDate, endDate, fetchRecords, fetchReport]);
 
-  const totalIncome = income.reduce((s, i) => s + Number(i.amount), 0);
   const inHand = income.filter((i) => i.type === 'in_hand').reduce((s, i) => s + Number(i.amount), 0);
-  const account = income.filter((i) => i.type === 'account').reduce((s, i) => s + Number(i.amount), 0);
+  const inAccount = income.filter((i) => i.type === 'account').reduce((s, i) => s + Number(i.amount), 0);
+  const pending = income.filter((i) => i.type === 'pending').reduce((s, i) => s + Number(i.amount), 0);
+  const totalIncome = inHand + inAccount;
 
   const handleAddIncome = async (e) => {
     e.preventDefault();
@@ -189,17 +193,21 @@ export default function Income() {
         <>
           {loading ? <div className="stats-grid"><SkeletonCard /><SkeletonCard /><SkeletonCard /></div> : (
             <div className="stats-grid">
-              <div className="stat-card">
+              <div className={`stat-card clickable ${filterType === 'all' ? 'active' : ''}`} onClick={() => setFilterType('all')}>
                 <div className="stat-icon amber"><span>₹</span></div>
-                <div className="stat-info"><h4>Total Income</h4><div className="stat-value amount-green">{formatCurrency(totalIncome)}</div><div className="stat-sub">{income.length} records</div></div>
+                <div className="stat-info"><h4>Realized Income</h4><div className="stat-value amount-green">{formatCurrency(totalIncome)}</div><div className="stat-sub">{income.filter(i => i.type !== 'pending').length} records</div></div>
               </div>
-              <div className="stat-card">
+              <div className={`stat-card clickable ${filterType === 'in_hand' ? 'active' : ''}`} onClick={() => setFilterType('in_hand')}>
                 <div className="stat-icon green"><span>💵</span></div>
                 <div className="stat-info"><h4>In Hand</h4><div className="stat-value">{formatCurrency(inHand)}</div></div>
               </div>
-              <div className="stat-card">
+              <div className={`stat-card clickable ${filterType === 'account' ? 'active' : ''}`} onClick={() => setFilterType('account')}>
                 <div className="stat-icon blue"><span>🏦</span></div>
-                <div className="stat-info"><h4>Account</h4><div className="stat-value">{formatCurrency(account)}</div></div>
+                <div className="stat-info"><h4>In Account</h4><div className="stat-value">{formatCurrency(inAccount)}</div></div>
+              </div>
+              <div className={`stat-card clickable ${filterType === 'pending' ? 'active' : ''}`} onClick={() => setFilterType('pending')}>
+                <div className="stat-icon red"><span>⏳</span></div>
+                <div className="stat-info"><h4>Pending</h4><div className="stat-value amount-red">{formatCurrency(pending)}</div><div className="stat-sub">{income.filter(i => i.type === 'pending').length} bills</div></div>
               </div>
             </div>
           )}
@@ -214,6 +222,7 @@ export default function Income() {
                   <Legend />
                   <Bar dataKey="In Hand" fill="#10b981" radius={[4, 4, 0, 0]} />
                   <Bar dataKey="Account" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Pending" fill="#f59e0b" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : <div className="empty-state">No chart data</div>}
@@ -226,10 +235,10 @@ export default function Income() {
                   <tr key={inc.id}>
                     <td>{i + 1}</td>
                     <td><span className="amount amount-green">{formatCurrency(inc.amount)}</span></td>
-                    <td><span className={`badge ${inc.type === 'in_hand' ? 'badge-green' : 'badge-blue'}`}>{inc.type === 'in_hand' ? 'Cash' : 'Account'}</span></td>
-                    <td style={{ textTransform: 'capitalize' }}>{inc.source?.replace(/_/g, ' ')}</td>
+                    <td><span className={`badge ${inc.type === 'in_hand' ? 'badge-green' : inc.type === 'account' ? 'badge-blue' : 'badge-amber'}`}>{inc.type === 'in_hand' ? 'Cash' : inc.type === 'account' ? 'Account' : 'Pending'}</span></td>
+                    <td style={{ textTransform: 'capitalize' }}>{(inc.source || '').replace(/_/g, ' ')} {inc.type === 'pending' ? <small style={{display:'block',color:'var(--text-tertiary)'}}>{inc.description}</small> : ''}</td>
                     <td>{new Date(inc.date).toLocaleDateString('en-IN')}</td>
-                    <td><button className="btn-icon" onClick={() => handleDeleteIncome(inc.id)}><HiOutlineTrash size={16} /></button></td>
+                    <td>{inc.type !== 'pending' && <button className="btn-icon" onClick={() => handleDeleteIncome(inc.real_id || inc.id)}><HiOutlineTrash size={16} /></button>}</td>
                   </tr>
                 ))}
               </tbody>

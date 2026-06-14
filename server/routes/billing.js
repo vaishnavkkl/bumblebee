@@ -6,6 +6,7 @@ const ctrl = require('../controllers/billingController');
 router.post('/', auth, ctrl.createBill);
 router.get('/', auth, ctrl.getBills);
 router.put('/:id/status', auth, ctrl.updateWashStatus);
+router.put('/:id/payment-status', auth, ctrl.updatePaymentStatus);
 router.get('/payments', auth, ctrl.getPayments);
 router.delete('/payments/:id', auth, adminOnly, ctrl.deletePayment);
 router.get('/advance-payments', auth, ctrl.getAdvancePayments);

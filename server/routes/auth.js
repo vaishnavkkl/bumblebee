@@ -6,5 +6,6 @@ const ctrl = require('../controllers/authController');
 router.post('/login', ctrl.login);
 router.post('/logout', auth, ctrl.logout);
 router.get('/me', auth, ctrl.me);
+router.put('/profile', auth, ctrl.updateProfile);
 
 module.exports = router;

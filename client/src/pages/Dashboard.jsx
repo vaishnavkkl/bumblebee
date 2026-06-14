@@ -3,24 +3,24 @@ import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { Toaster } from 'react-hot-toast';
 import {
-  HiOutlineCurrencyRupee, HiOutlineUserGroup, HiOutlineClipboardList, HiOutlineCash, HiOutlineEye,
-  HiOutlineDocumentText, HiOutlineClipboard, HiOutlineTruck, HiOutlineChartBar,
-  HiOutlineCalendar, HiOutlineClock, HiOutlineBriefcase, HiOutlineReceiptTax
-} from 'react-icons/hi';
+  BillIcon, PaymentHistoryIcon, CarWashStatusIcon, IncomeIcon, ExpenseIcon,
+  TeamIcon, CalendarCheckIcon, HoursIcon, SalaryIcon, CustomerIcon,
+  MoneyStackIcon, WashIcon, DashboardIcon,
+} from '../components/CarWashIcons';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { SkeletonCard, PageLoader } from '../components/Loaders';
 
 const MODULES = [
-  { label: 'New Bill',        icon: <HiOutlineDocumentText />, path: '/billing/new',         light: '#1d4ed8', dark: '#3b82f6', desc: 'Create a wash bill' },
-  { label: 'Payment History', icon: <HiOutlineClipboard />,    path: '/billing/history',      light: '#059669', dark: '#10b981', desc: 'View all transactions' },
-  { label: 'Vehicle Status',  icon: <HiOutlineTruck />,        path: '/vehicles/status',      light: '#b45309', dark: '#f59e0b', desc: 'Live wash queue' },
-  { label: 'Income',          icon: <HiOutlineCurrencyRupee />,path: '/finance/income',       light: '#047857', dark: '#10b981', desc: 'Revenue records' },
-  { label: 'Expenses',        icon: <HiOutlineReceiptTax />,   path: '/finance/expenses',     light: '#b91c1c', dark: '#ef4444', desc: 'Track spending' },
-  { label: 'Employees',       icon: <HiOutlineUserGroup />,    path: '/employees',            light: '#6d28d9', dark: '#8b5cf6', desc: 'Manage team' },
-  { label: 'Attendance',      icon: <HiOutlineCalendar />,     path: '/employees/attendance', light: '#1e40af', dark: '#60a5fa', desc: 'Daily check-in/out' },
-  { label: 'Working Hours',   icon: <HiOutlineClock />,        path: '/employees/hours',      light: '#92400e', dark: '#fbbf24', desc: 'Hours summary' },
-  { label: 'Salary',          icon: <HiOutlineBriefcase />,    path: '/employees/salary',     light: '#065f46', dark: '#34d399', desc: 'Payroll' },
-  { label: 'Customers',       icon: <HiOutlineChartBar />,     path: '/analytics/customers',  light: '#9d174d', dark: '#f472b6', desc: 'Retention analytics' },
+  { label: 'New Bill',        icon: <BillIcon />,           path: '/billing/new',          light: '#1d4ed8', dark: '#3b82f6', desc: 'Create a wash bill' },
+  { label: 'Payment History', icon: <PaymentHistoryIcon />, path: '/billing/history',       light: '#059669', dark: '#10b981', desc: 'View all transactions' },
+  { label: 'Vehicle Status',  icon: <CarWashStatusIcon />,  path: '/vehicles/status',       light: '#b45309', dark: '#f59e0b', desc: 'Live wash queue' },
+  { label: 'Income',          icon: <IncomeIcon />,         path: '/finance/income',        light: '#047857', dark: '#10b981', desc: 'Revenue records' },
+  { label: 'Expenses',        icon: <ExpenseIcon />,        path: '/finance/expenses',      light: '#b91c1c', dark: '#ef4444', desc: 'Track spending' },
+  { label: 'Employees',       icon: <TeamIcon />,           path: '/employees',             light: '#6d28d9', dark: '#8b5cf6', desc: 'Manage team' },
+  { label: 'Attendance',      icon: <CalendarCheckIcon />,  path: '/employees/attendance',  light: '#1e40af', dark: '#60a5fa', desc: 'Daily check-in/out' },
+  { label: 'Working Hours',   icon: <HoursIcon />,          path: '/employees/hours',       light: '#92400e', dark: '#fbbf24', desc: 'Hours summary' },
+  { label: 'Salary',          icon: <SalaryIcon />,         path: '/employees/salary',      light: '#065f46', dark: '#34d399', desc: 'Payroll' },
+  { label: 'Customers',       icon: <CustomerIcon />,       path: '/analytics/customers',   light: '#9d174d', dark: '#f472b6', desc: 'Retention analytics' },
 ];
 
 const COLORS = ['#f59e0b', '#3b82f6', '#10b981', '#ef4444', '#8b5cf6'];
@@ -61,7 +61,7 @@ export default function Dashboard() {
 
       <div className="stats-grid">
         <div className="stat-card">
-          <div className="stat-icon amber"><HiOutlineCurrencyRupee /></div>
+          <div className="stat-icon amber"><MoneyStackIcon /></div>
           <div className="stat-info">
             <h4>Today's Income</h4>
             <div className="stat-value">₹{Number(data.todayIncome).toLocaleString()}</div>
@@ -69,15 +69,15 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon red"><HiOutlineCash /></div>
+          <div className="stat-icon red"><ExpenseIcon /></div>
           <div className="stat-info"><h4>Today's Expenses</h4><div className="stat-value">₹{Number(data.todayExpenses).toLocaleString()}</div></div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon blue"><HiOutlineClipboardList /></div>
+          <div className="stat-icon blue"><WashIcon /></div>
           <div className="stat-info"><h4>Today's Bills</h4><div className="stat-value">{data.todayBills}</div><div className="stat-sub">{data.pendingWash} currently washing</div></div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon green"><HiOutlineUserGroup /></div>
+          <div className="stat-icon green"><TeamIcon /></div>
           <div className="stat-info"><h4>Total Employees</h4><div className="stat-value">{data.totalEmployees}</div></div>
         </div>
       </div>
@@ -125,7 +125,7 @@ export default function Dashboard() {
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border-primary)" />
                 <XAxis dataKey="date" tick={{ fontSize: 12, fill: 'var(--text-tertiary)' }} tickLine={false} axisLine={false} />
                 <YAxis tickFormatter={(val) => `₹${val}`} tick={{ fontSize: 12, fill: 'var(--text-tertiary)' }} tickLine={false} axisLine={false} />
-                <Tooltip 
+                <Tooltip
                   contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-primary)', borderRadius: 8, fontSize: 13, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
                   formatter={(value) => [`₹${Number(value).toLocaleString()}`, '']}
                   labelStyle={{ color: 'var(--text-secondary)', marginBottom: 4 }}
@@ -154,15 +154,15 @@ export default function Dashboard() {
 
       <div className="stats-grid" style={{ marginTop: 8 }}>
         <div className="stat-card">
-          <div className="stat-icon green"><HiOutlineEye /></div>
+          <div className="stat-icon green"><IncomeIcon /></div>
           <div className="stat-info"><h4>Monthly Income</h4><div className="stat-value amount-green">₹{Number(data.monthlyIncome).toLocaleString()}</div></div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon red"><HiOutlineEye /></div>
+          <div className="stat-icon red"><ExpenseIcon /></div>
           <div className="stat-info"><h4>Monthly Expenses</h4><div className="stat-value amount-red">₹{Number(data.monthlyExpenses).toLocaleString()}</div></div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon blue"><HiOutlineEye /></div>
+          <div className="stat-icon blue"><MoneyStackIcon /></div>
           <div className="stat-info">
             <h4>Monthly Profit</h4>
             <div className="stat-value" style={{ color: Number(data.monthlyIncome) - Number(data.monthlyExpenses) >= 0 ? 'var(--success)' : 'var(--danger)' }}>

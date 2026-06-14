@@ -19,7 +19,11 @@ exports.getSummary = async (req, res) => {
     const [[{ pendingWash }]]    = await pool.query("SELECT COUNT(*) as pendingWash FROM bills WHERE wash_status IN ('pending','in_progress')");
     const [[{ totalInHand }]]    = await pool.query("SELECT COALESCE(SUM(amount),0) as totalInHand FROM income WHERE type='in_hand' AND date=?", [today]);
     const [[{ totalAccount }]]   = await pool.query("SELECT COALESCE(SUM(amount),0) as totalAccount FROM income WHERE type='account' AND date=?", [today]);
-    const [[{ monthlyIncome }]]  = await pool.query('SELECT COALESCE(SUM(amount),0) as monthlyIncome FROM income WHERE MONTH(date)=MONTH(CURDATE()) AND YEAR(date)=YEAR(CURDATE())');
+    const [[{ pendingPayments }]] = await pool.query('SELECT COUNT(*) as pendingPayments FROM bills WHERE payment_status="pending" AND balance_amount > 0');
+    const [[{ monthlyIncomeRealized }]] = await pool.query('SELECT COALESCE(SUM(amount),0) as monthlyIncomeRealized FROM income WHERE MONTH(date)=MONTH(CURDATE()) AND YEAR(date)=YEAR(CURDATE())');
+    const [[{ monthlyPending }]] = await pool.query('SELECT COALESCE(SUM(balance_amount),0) as monthlyPending FROM bills WHERE payment_status="pending" AND MONTH(created_at)=MONTH(CURDATE()) AND YEAR(created_at)=YEAR(CURDATE())');
+    const monthlyIncome = Number(monthlyIncomeRealized) + Number(monthlyPending);
+
     const [[{ monthlyExpenses }]]= await pool.query('SELECT COALESCE(SUM(amount),0) as monthlyExpenses FROM expenses WHERE MONTH(date)=MONTH(CURDATE()) AND YEAR(date)=YEAR(CURDATE())');
 
     const [weeklyIncome]   = await pool.query(`SELECT date, SUM(amount) as total FROM income WHERE date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) GROUP BY date ORDER BY date ASC`);
@@ -30,6 +34,19 @@ exports.getSummary = async (req, res) => {
        WHERE DATE(CONVERT_TZ(b.created_at,'+00:00','+05:30')) = ? GROUP BY vt.label`, [today]
     );
 
-    res.json({ totalEmployees, todayIncome, todayExpenses, todayBills, pendingWash, totalInHand, totalAccount, monthlyIncome, monthlyExpenses, weeklyIncome, weeklyExpenses, vehicleStats });
+    res.json({ totalEmployees, todayIncome, todayExpenses, todayBills, pendingWash, pendingPayments, totalInHand, totalAccount, monthlyIncome, monthlyExpenses, weeklyIncome, weeklyExpenses, vehicleStats });
+  } catch (err) { res.status(500).json({ message: err.message }); }
+};
+
+exports.getEmployeeSummary = async (req, res) => {
+  try {
+    const today = localDate();
+    const userId = req.user.id;
+
+    const [att] = await pool.query('SELECT clock_in, clock_out FROM attendance WHERE user_id = ? AND date = ? ORDER BY clock_in DESC LIMIT 1', [userId, today]);
+    const [[{ todayBills }]] = await pool.query('SELECT COUNT(*) as todayBills FROM bills WHERE DATE(created_at) = ? AND created_by = ?', [today, userId]);
+    const [[{ pendingWash }]] = await pool.query("SELECT COUNT(*) as pendingWash FROM bills WHERE wash_status IN ('pending','in_progress')");
+
+    res.json({ attendance: att[0] || null, todayBills, pendingWash });
   } catch (err) { res.status(500).json({ message: err.message }); }
 };

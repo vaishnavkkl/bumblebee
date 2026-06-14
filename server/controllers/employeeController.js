@@ -77,10 +77,10 @@ exports.checkOut = async (req, res) => {
   try {
     let user_id = req.body.user_id;
     if (!user_id || req.user.role !== 'admin') user_id = req.user.id;
-    const today = localDate();
+    // Find the most recent active check-in session for this user (handles midnight shifts)
     const [records] = await pool.query(
-      'SELECT * FROM attendance WHERE user_id = ? AND date = ? AND clock_out IS NULL ORDER BY clock_in DESC LIMIT 1',
-      [user_id, today]
+      'SELECT * FROM attendance WHERE user_id = ? AND clock_out IS NULL ORDER BY clock_in DESC LIMIT 1',
+      [user_id]
     );
     if (records.length === 0) return res.status(400).json({ message: 'No active check-in found' });
     const hours = ((Date.now() - new Date(records[0].clock_in).getTime()) / 3600000).toFixed(2);
@@ -125,14 +125,42 @@ exports.getWorkingHours = async (req, res) => {
 };
 
 exports.paySalary = async (req, res) => {
+  const conn = await pool.getConnection();
   try {
+    await conn.beginTransaction();
     const { user_id, amount, month, paid_date, notes } = req.body;
-    const [result] = await pool.query(
+
+    // Prevent duplicate salary payments for the same month
+    const [existing] = await conn.query('SELECT id FROM salary_payments WHERE user_id = ? AND month = ?', [user_id, month]);
+    if (existing.length > 0) {
+      throw new Error(`Salary for ${month} has already been paid to this employee.`);
+    }
+
+    // Record salary payment
+    const [result] = await conn.query(
       'INSERT INTO salary_payments (user_id, amount, month, paid_date, notes) VALUES (?, ?, ?, ?, ?)',
       [user_id, amount, month, paid_date, notes]
     );
+
+    // Fetch employee name for description
+    const [[emp]] = await conn.query('SELECT name FROM users WHERE id = ?', [user_id]);
+    const empName = emp ? emp.name : `Employee #${user_id}`;
+    const description = `Salary to ${empName} — ${month}${notes ? ` (${notes})` : ''}`;
+
+    // Auto-record as expense
+    await conn.query(
+      'INSERT INTO expenses (amount, category, description, date, created_by) VALUES (?, ?, ?, ?, ?)',
+      [amount, 'salary', description, paid_date, req.user.id]
+    );
+
+    await conn.commit();
     res.status(201).json({ id: result.insertId });
-  } catch (err) { res.status(500).json({ message: err.message }); }
+  } catch (err) {
+    await conn.rollback();
+    res.status(500).json({ message: err.message });
+  } finally {
+    conn.release();
+  }
 };
 
 exports.getSalaryHistory = async (req, res) => {

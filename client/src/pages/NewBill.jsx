@@ -21,6 +21,7 @@ export default function NewBill() {
   const [selectedExtras, setSelectedExtras] = useState([]);
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [paymentMode, setPaymentMode] = useState('cash');
+  const [paymentStatus, setPaymentStatus] = useState('paid');
   const [advanceAmount, setAdvanceAmount] = useState('');
   const [customerMobile, setCustomerMobile] = useState('');
   const [createdBy, setCreatedBy] = useState('');
@@ -58,7 +59,7 @@ export default function NewBill() {
   const extrasTotal = selectedExtras.reduce((sum, id) => sum + Number(extras.find(e => e.id === id)?.price || 0), 0);
   const totalAmount = Number(servicePrice) + extrasTotal;
   const advance = Number(advanceAmount) || 0;
-  const paidAmount = totalAmount - advance;
+  const paidAmount = paymentStatus === 'pending' ? 0 : totalAmount - advance;
 
   const handleVehicleNumberChange = (e) => {
     const raw = e.target.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
@@ -95,6 +96,7 @@ export default function NewBill() {
         service_id: selectedService, extra_service_ids: selectedExtras,
         total_amount: totalAmount, paid_amount: paidAmount,
         advance_amount: advance, payment_mode: paymentMode,
+        payment_status: paymentStatus,
       });
       toast.success('Bill created successfully!');
       
@@ -119,7 +121,7 @@ export default function NewBill() {
       }
 
       setSelectedVT(null); setSelectedService(null); setSelectedExtras([]);
-      setVehicleNumber(''); setCustomerMobile(''); setAdvanceAmount(''); setPaymentMode('cash'); setCreatedBy('');
+      setVehicleNumber(''); setCustomerMobile(''); setAdvanceAmount(''); setPaymentMode('cash'); setPaymentStatus('paid'); setCreatedBy('');
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to create bill');
     } finally { setSubmitting(false); }
@@ -268,7 +270,9 @@ export default function NewBill() {
           <div className="form-row-3">
             <div className="form-group">
               <label>Vehicle Number</label>
-              <input type="text" className="form-control" placeholder="KA-01-AB-1234" value={vehicleNumber} onChange={handleVehicleNumberChange} />
+              <div style={{ position: 'relative' }}>
+                <input type="text" className="form-control" placeholder="KA-01-AB-1234" value={vehicleNumber} onChange={handleVehicleNumberChange} />
+              </div>
             </div>
             <div className="form-group">
               <label>Payment Mode</label>
@@ -278,12 +282,22 @@ export default function NewBill() {
               </select>
             </div>
             <div className="form-group">
+              <label>Payment Status (Optional)</label>
+              <select className="form-control" value={paymentStatus} onChange={e => setPaymentStatus(e.target.value)}>
+                <option value="pending">Pending</option>
+                <option value="paid">Paid</option>
+              </select>
+            </div>
+            <div className="form-group">
               <label>Advance Amount</label>
               <input type="number" className="form-control" placeholder="0" value={advanceAmount} onChange={e => setAdvanceAmount(e.target.value)} />
             </div>
             <div className="form-group">
               <label>Customer Mobile (Optional)</label>
               <input type="text" className="form-control" placeholder="98XXXXXXXX" value={customerMobile} onChange={e => setCustomerMobile(e.target.value)} />
+              {paymentStatus === 'pending' && !customerMobile && (
+                <span style={{ fontSize: '0.7rem', color: 'var(--accent)', marginTop: 4, display: 'block' }}>⚠️ Recommended for pending payments</span>
+              )}
             </div>
           </div>
           <div className="form-group">

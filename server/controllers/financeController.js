@@ -17,13 +17,42 @@ exports.addIncome = async (req, res) => {
 exports.getIncome = async (req, res) => {
   try {
     const { startDate, endDate, type } = req.query;
-    let query = 'SELECT i.*, u.name as created_by_name FROM income i JOIN users u ON i.created_by = u.id WHERE 1=1';
+    // Regular income query
+    let query = `
+      SELECT i.id as real_id, CAST(i.id AS CHAR) as id, i.amount, i.type, i.source, i.description, i.date, i.created_at, u.name as created_by_name 
+      FROM income i JOIN users u ON i.created_by = u.id WHERE 1=1
+    `;
     const params = [];
     if (startDate) { query += ' AND i.date >= ?'; params.push(startDate); }
     if (endDate)   { query += ' AND i.date <= ?'; params.push(endDate); }
     if (type)      { query += ' AND i.type = ?';  params.push(type); }
-    query += ' ORDER BY i.date DESC, i.created_at DESC';
-    const [records] = await pool.query(query, params);
+
+    // Pending bills query
+    let pendingQuery = `
+      SELECT NULL as real_id, CONCAT('bill_', b.id) as id, b.balance_amount as amount, 'pending' as type, 'wash' as source, CONCAT('Pending: ', b.vehicle_number) as description, DATE(b.created_at) as date, b.created_at, u.name as created_by_name
+      FROM bills b JOIN users u ON b.created_by = u.id 
+      WHERE LOWER(b.payment_status) = 'pending' AND b.balance_amount > 0
+    `;
+    const pendingParams = [];
+    if (startDate) { pendingQuery += ' AND DATE(b.created_at) >= ?'; pendingParams.push(startDate); }
+    if (endDate)   { pendingQuery += ' AND DATE(b.created_at) <= ?'; pendingParams.push(endDate); }
+    
+    let finalQuery = query;
+    let finalParams = [...params];
+    
+    if (!type || type === 'pending') {
+      if (type === 'pending') {
+        finalQuery = pendingQuery;
+        finalParams = pendingParams;
+      } else {
+        finalQuery = `(${query}) UNION ALL (${pendingQuery})`;
+        finalParams = [...params, ...pendingParams];
+      }
+    }
+    
+    finalQuery += ' ORDER BY date DESC, created_at DESC';
+
+    const [records] = await pool.query(finalQuery, finalParams);
     res.json(records);
   } catch (err) { res.status(500).json({ message: err.message }); }
 };
@@ -31,11 +60,13 @@ exports.getIncome = async (req, res) => {
 exports.getDailyIncome = async (req, res) => {
   try {
     const { startDate, endDate, days } = req.query;
+    
     let query = `
       SELECT date,
         SUM(amount) as total,
         SUM(CASE WHEN type = 'in_hand' THEN amount ELSE 0 END) as in_hand,
-        SUM(CASE WHEN type = 'account' THEN amount ELSE 0 END) as account
+        SUM(CASE WHEN type = 'account' THEN amount ELSE 0 END) as account,
+        0 as pending
       FROM income WHERE 1=1`;
     const params = [];
     if (startDate && endDate) {
@@ -46,8 +77,41 @@ exports.getDailyIncome = async (req, res) => {
       query += ' AND date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)';
       params.push(limit);
     }
-    query += ' GROUP BY date ORDER BY date ASC';
-    const [records] = await pool.query(query, params);
+    query += ' GROUP BY date';
+
+    let pendingQuery = `
+      SELECT DATE(created_at) as date,
+        0 as total,
+        0 as in_hand,
+        0 as account,
+        SUM(balance_amount) as pending
+      FROM bills
+      WHERE payment_status = 'pending' AND balance_amount > 0
+    `;
+    const pendingParams = [];
+    if (startDate && endDate) {
+      pendingQuery += ' AND DATE(created_at) BETWEEN ? AND ?';
+      pendingParams.push(startDate, endDate);
+    } else {
+      const limit = parseInt(days, 10) || 30;
+      pendingQuery += ' AND DATE(created_at) >= DATE_SUB(CURDATE(), INTERVAL ? DAY)';
+      pendingParams.push(limit);
+    }
+    pendingQuery += ' GROUP BY DATE(created_at)';
+
+    let finalQuery = `
+      SELECT date,
+             SUM(total) as total,
+             SUM(in_hand) as in_hand,
+             SUM(account) as account,
+             SUM(pending) as pending
+      FROM (
+        (${query}) UNION ALL (${pendingQuery})
+      ) as combined
+      GROUP BY date ORDER BY date ASC
+    `;
+    
+    const [records] = await pool.query(finalQuery, [...params, ...pendingParams]);
     res.json(records);
   } catch (err) { res.status(500).json({ message: err.message }); }
 };
@@ -90,14 +154,21 @@ exports.getExpenses = async (req, res) => {
 
 exports.getDailyExpenses = async (req, res) => {
   try {
-    const { days } = req.query;
-    const limit = parseInt(days, 10) || 30;
-    const [records] = await pool.query(
-      `SELECT date, SUM(amount) as total, category
-       FROM expenses WHERE date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
-       GROUP BY date, category ORDER BY date ASC`,
-      [limit]
-    );
+    const { days, startDate, endDate } = req.query;
+    let query, params;
+    if (startDate && endDate) {
+      query = `SELECT date, SUM(amount) as total, category
+               FROM expenses WHERE date BETWEEN ? AND ?
+               GROUP BY date, category ORDER BY date ASC`;
+      params = [startDate, endDate];
+    } else {
+      const limit = parseInt(days, 10) || 30;
+      query = `SELECT date, SUM(amount) as total, category
+               FROM expenses WHERE date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+               GROUP BY date, category ORDER BY date ASC`;
+      params = [limit];
+    }
+    const [records] = await pool.query(query, params);
     res.json(records);
   } catch (err) { res.status(500).json({ message: err.message }); }
 };

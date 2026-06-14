@@ -1,9 +1,19 @@
 const pool = require('../db');
 
-// Core customer list with full metrics
 exports.getCustomerAnalytics = async (req, res) => {
   try {
-    const [results] = await pool.query(`
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const offset = (page - 1) * limit;
+    const search = req.query.search || '';
+    const status = req.query.status || 'All';
+
+    // Build base subquery with search by mobile or vehicle
+    const searchParam = search ? [`%${search}%`, `%${search}%`] : [];
+    const searchClause = search ? 'AND (b.customer_mobile LIKE ? OR b.vehicle_number LIKE ?)' : '';
+
+    // Subquery that gets all customers with their computed fields
+    const baseQuery = `
       SELECT 
         b.customer_mobile,
         COUNT(b.id) AS visit_count,
@@ -11,15 +21,34 @@ exports.getCustomerAnalytics = async (req, res) => {
         AVG(b.total_amount) AS avg_spend,
         MIN(b.created_at) AS first_visit,
         MAX(b.created_at) AS last_visit,
+        DATEDIFF(NOW(), MAX(b.created_at)) AS days_since_last_visit,
         DATEDIFF(MAX(b.created_at), MIN(b.created_at)) AS customer_lifespan_days,
-        GROUP_CONCAT(DISTINCT vt.label SEPARATOR ', ') AS preferred_types
+        GROUP_CONCAT(DISTINCT vt.label SEPARATOR ", ") AS preferred_types,
+        GROUP_CONCAT(DISTINCT b.vehicle_number SEPARATOR ", ") AS all_vehicles
       FROM bills b
       LEFT JOIN vehicle_types vt ON b.vehicle_type_id = vt.id
-      WHERE b.customer_mobile IS NOT NULL AND TRIM(b.customer_mobile) != ''
+      WHERE b.customer_mobile IS NOT NULL AND TRIM(b.customer_mobile) != "" ${searchClause}
       GROUP BY b.customer_mobile
-      ORDER BY last_visit DESC
-    `);
-    res.json(results);
+    `;
+
+    let havingClause = '';
+    if (status === 'Active') havingClause = 'HAVING days_since_last_visit <= 30';
+    else if (status === 'At Risk') havingClause = 'HAVING days_since_last_visit > 30 AND days_since_last_visit <= 90';
+    else if (status === 'Lost') havingClause = 'HAVING days_since_last_visit > 90';
+
+    // Get accurate total using subquery
+    const [[{ total }]] = await pool.query(
+      `SELECT COUNT(*) AS total FROM (${baseQuery} ${havingClause}) AS sub`,
+      [...searchParam]
+    );
+
+    // Paginated results
+    const [results] = await pool.query(
+      `${baseQuery} ${havingClause} ORDER BY last_visit DESC LIMIT ? OFFSET ?`,
+      [...searchParam, limit, offset]
+    );
+
+    res.json({ data: results, total, page, limit });
   } catch (err) {
     console.error('getCustomerAnalytics error:', err.message);
     res.status(500).json({ message: err.message });

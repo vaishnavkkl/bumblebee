@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS bills (
   advance_amount DECIMAL(10,2) DEFAULT 0,
   balance_amount DECIMAL(10,2) DEFAULT 0,
   payment_mode ENUM('cash', 'account', 'partial') DEFAULT 'cash',
+  payment_status ENUM('pending', 'paid') DEFAULT 'pending',
   wash_status ENUM('pending', 'in_progress', 'completed') DEFAULT 'pending',
   created_by INT NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

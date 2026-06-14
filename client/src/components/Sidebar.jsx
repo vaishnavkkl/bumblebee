@@ -1,6 +1,10 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { HiOutlineHome, HiOutlineDocumentText, HiOutlineClock, HiOutlineCurrencyRupee, HiOutlineUserGroup, HiOutlineTruck, HiOutlineClipboardList, HiOutlineChartBar, HiOutlineCash, HiOutlineCalendar, HiOutlineShieldCheck } from 'react-icons/hi';
+import {
+  DashboardIcon, BillIcon, PaymentHistoryIcon, CarWashStatusIcon,
+  IncomeIcon, ExpenseIcon, PendingIcon, TeamIcon, CalendarCheckIcon,
+  HoursIcon, SalaryIcon, CustomerIcon, SecurityIcon,
+} from './CarWashIcons';
 
 export default function Sidebar() {
   const { isAdmin } = useAuth();
@@ -19,20 +23,18 @@ export default function Sidebar() {
       </div>
 
       <nav className="sidebar-nav">
-        {isAdmin && (
-          <div className="nav-section">
-            <div className="nav-section-title">Overview</div>
-            <NavLink to="/" end className={isActive('/')}>
-              <span className="nav-icon"><HiOutlineHome /></span> Dashboard
-            </NavLink>
-          </div>
-        )}
+        <div className="nav-section">
+          <div className="nav-section-title">Overview</div>
+          <NavLink to="/" end className={isActive('/')}>
+            <span className="nav-icon"><DashboardIcon /></span> Dashboard
+          </NavLink>
+        </div>
 
         {isAdmin && (
           <div className="nav-section">
             <div className="nav-section-title">Analytics</div>
             <NavLink to="/analytics/customers" className={isActive('/analytics/customers')}>
-              <span className="nav-icon"><HiOutlineChartBar /></span> Customers
+              <span className="nav-icon"><CustomerIcon /></span> Customers
             </NavLink>
           </div>
         )}
@@ -40,17 +42,17 @@ export default function Sidebar() {
         <div className="nav-section">
           <div className="nav-section-title">Billing</div>
           <NavLink to="/billing/new" className={isActive('/billing/new')}>
-            <span className="nav-icon"><HiOutlineDocumentText /></span> New Bill
+            <span className="nav-icon"><BillIcon /></span> New Bill
           </NavLink>
           <NavLink to="/billing/history" className={isActive('/billing/history')}>
-            <span className="nav-icon"><HiOutlineClipboardList /></span> Payment History
+            <span className="nav-icon"><PaymentHistoryIcon /></span> Payment History
           </NavLink>
         </div>
 
         <div className="nav-section">
           <div className="nav-section-title">Vehicles</div>
           <NavLink to="/vehicles/status" className={isActive('/vehicles/status')}>
-            <span className="nav-icon"><HiOutlineTruck /></span> Wash Status
+            <span className="nav-icon"><CarWashStatusIcon /></span> Wash Status
           </NavLink>
         </div>
 
@@ -58,11 +60,14 @@ export default function Sidebar() {
           <div className="nav-section-title">Finance</div>
           {isAdmin && (
             <NavLink to="/finance/income" className={isActive('/finance/income')}>
-              <span className="nav-icon"><HiOutlineCurrencyRupee /></span> Income
+              <span className="nav-icon"><IncomeIcon /></span> Income
             </NavLink>
           )}
           <NavLink to="/finance/expenses" className={isActive('/finance/expenses')}>
-            <span className="nav-icon"><HiOutlineCash /></span> Expenses
+            <span className="nav-icon"><ExpenseIcon /></span> Expenses
+          </NavLink>
+          <NavLink to="/finance/pending" className={isActive('/finance/pending')}>
+            <span className="nav-icon"><PendingIcon /></span> Pending
           </NavLink>
         </div>
 
@@ -70,19 +75,19 @@ export default function Sidebar() {
           <div className="nav-section-title">Employees</div>
           {isAdmin && (
             <NavLink to="/employees" end className={isActive('/employees')}>
-              <span className="nav-icon"><HiOutlineUserGroup /></span> Manage
+              <span className="nav-icon"><TeamIcon /></span> Manage
             </NavLink>
           )}
           <NavLink to="/employees/attendance" className={isActive('/employees/attendance')}>
-            <span className="nav-icon"><HiOutlineCalendar /></span> Attendance
+            <span className="nav-icon"><CalendarCheckIcon /></span> Attendance
           </NavLink>
           {isAdmin && (
             <>
               <NavLink to="/employees/hours" className={isActive('/employees/hours')}>
-                <span className="nav-icon"><HiOutlineClock /></span> Working Hours
+                <span className="nav-icon"><HoursIcon /></span> Working Hours
               </NavLink>
               <NavLink to="/employees/salary" className={isActive('/employees/salary')}>
-                <span className="nav-icon"><HiOutlineChartBar /></span> Salary
+                <span className="nav-icon"><SalaryIcon /></span> Salary
               </NavLink>
             </>
           )}
@@ -92,7 +97,7 @@ export default function Sidebar() {
           <div className="nav-section">
             <div className="nav-section-title">System</div>
             <NavLink to="/admin/security" className={isActive('/admin/security')}>
-              <span className="nav-icon"><HiOutlineShieldCheck /></span> Security & Data
+              <span className="nav-icon"><SecurityIcon /></span> Security & Data
             </NavLink>
           </div>
         )}
