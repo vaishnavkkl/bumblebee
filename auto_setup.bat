@@ -14,6 +14,17 @@ if %errorlevel% neq 0 (
     exit /b
 )
 
+echo Checking MySQL service...
+call :ensure_mysql
+if errorlevel 1 (
+    echo.
+    echo [ERROR] MySQL is not running.
+    echo Start MySQL manually, or right-click this file and choose "Run as administrator".
+    pause
+    exit /b 1
+)
+echo.
+
 :: 2. Configure Database
 echo [STEP 1/6] Database Configuration
 set /p DB_PASS="Enter your MySQL root password: "
@@ -87,6 +98,13 @@ if %errorlevel% neq 0 (
 )
 cd ..
 
+echo.
+echo Creating Start App shortcut...
+call create_start_app_shortcut.bat --quiet
+if %errorlevel% neq 0 (
+    echo [WARNING] Could not create Bumblebee Start App shortcut.
+)
+
 :: 4. Launch the application
 echo.
 echo [STEP 6/6] Launching Application...
@@ -100,6 +118,8 @@ echo.
 echo   Login details:
 echo   - Admin: admin@gmail.com / admin123
 echo   - Employee: sajith@gmail.com / sajith123
+echo.
+echo   Next time, use start_app.bat to open the app.
 echo ***************************************************
 echo.
 
@@ -113,3 +133,29 @@ echo.
 echo You can now close this setup window.
 echo Open http://localhost:3000 in your browser.
 pause
+exit /b 0
+
+:ensure_mysql
+for %%S in (MySQL80 MySQL MySQL57 MySQL56 MariaDB MariaDB10) do (
+    sc query "%%S" >nul 2>&1
+    if not errorlevel 1 (
+        sc query "%%S" | find /I "RUNNING" >nul
+        if not errorlevel 1 (
+            echo MySQL service %%S is already running.
+            exit /b 0
+        )
+
+        echo Starting MySQL service %%S...
+        net start "%%S" >nul 2>&1
+        if not errorlevel 1 (
+            echo MySQL service %%S started.
+            exit /b 0
+        )
+
+        echo [WARNING] Could not start MySQL service %%S.
+        exit /b 1
+    )
+)
+
+echo [WARNING] MySQL service was not found under common names.
+exit /b 1
