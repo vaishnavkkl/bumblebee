@@ -1,6 +1,8 @@
 @echo off
 setlocal enabledelayedexpansion
 
+cd /d "%~dp0"
+
 echo ===================================================
 echo   Bumblebee Car Wash Pro - Auto Setup & Launch
 echo ===================================================
@@ -18,10 +20,8 @@ echo Checking MySQL service...
 call :ensure_mysql
 if errorlevel 1 (
     echo.
-    echo [ERROR] MySQL is not running.
-    echo Start MySQL manually, or right-click this file and choose "Run as administrator".
-    pause
-    exit /b 1
+    echo [WARNING] Could not confirm or start MySQL automatically.
+    echo If setup fails, start MySQL manually from Services, XAMPP/WAMP, or MySQL Workbench.
 )
 echo.
 
@@ -98,13 +98,6 @@ if %errorlevel% neq 0 (
 )
 cd ..
 
-echo.
-echo Creating Start App shortcut...
-call create_start_app_shortcut.bat --quiet
-if %errorlevel% neq 0 (
-    echo [WARNING] Could not create Bumblebee Start App shortcut.
-)
-
 :: 4. Launch the application
 echo.
 echo [STEP 6/6] Launching Application...
@@ -136,6 +129,12 @@ pause
 exit /b 0
 
 :ensure_mysql
+powershell -NoProfile -Command "try { $client = New-Object Net.Sockets.TcpClient; $async = $client.BeginConnect('127.0.0.1', 3306, $null, $null); if ($async.AsyncWaitHandle.WaitOne(1000, $false)) { $client.EndConnect($async); $client.Close(); exit 0 }; $client.Close(); exit 1 } catch { exit 1 }" >nul 2>&1
+if not errorlevel 1 (
+    echo MySQL is already accepting connections on port 3306.
+    exit /b 0
+)
+
 for %%S in (MySQL80 MySQL MySQL57 MySQL56 MariaDB MariaDB10) do (
     sc query "%%S" >nul 2>&1
     if not errorlevel 1 (
@@ -157,5 +156,19 @@ for %%S in (MySQL80 MySQL MySQL57 MySQL56 MariaDB MariaDB10) do (
     )
 )
 
-echo [WARNING] MySQL service was not found under common names.
+set "MYSQL_SERVICE="
+for /f "usebackq delims=" %%S in (`powershell -NoProfile -Command "Get-Service | Where-Object { $_.Name -match 'mysql|maria' -or $_.DisplayName -match 'mysql|maria' } | Select-Object -ExpandProperty Name -First 1"`) do if not defined MYSQL_SERVICE set "MYSQL_SERVICE=%%S"
+
+if defined MYSQL_SERVICE (
+    echo Starting MySQL service %MYSQL_SERVICE%...
+    net start "%MYSQL_SERVICE%" >nul 2>&1
+    if not errorlevel 1 (
+        echo MySQL service %MYSQL_SERVICE% started.
+        exit /b 0
+    )
+    echo [WARNING] Could not start MySQL service %MYSQL_SERVICE%.
+    exit /b 1
+)
+
+echo [WARNING] MySQL service was not found.
 exit /b 1
