@@ -15,7 +15,7 @@ if %errorlevel% neq 0 (
 )
 
 :: 2. Configure Database
-echo [STEP 1/5] Database Configuration
+echo [STEP 1/6] Database Configuration
 set /p DB_PASS="Enter your MySQL root password: "
 echo.
 
@@ -27,7 +27,7 @@ echo DB_NAME=bumblebee_db >> server\.env
 echo JWT_SECRET=bumblebee_secret_key_2026 >> server\.env
 echo PORT=5000 >> server\.env
 
-echo [STEP 2/5] Seeding Database...
+echo [STEP 2/6] Seeding Database...
 :: Try to run mysql. Note: mysql must be in your System PATH
 mysql -u root -p"!DB_PASS!" < server\schema.sql
 if %errorlevel% neq 0 (
@@ -45,28 +45,61 @@ if %errorlevel% neq 0 (
 
 :: 3. Install Dependencies
 echo.
-echo [STEP 3/5] Installing Backend Dependencies...
+echo [STEP 3/6] Installing Backend Dependencies...
 cd server
 call npm install
+if %errorlevel% neq 0 (
+    echo.
+    echo [ERROR] Backend dependency installation failed.
+    pause
+    exit /b 1
+)
+
+echo.
+echo [STEP 4/6] Updating Default Users...
+node migrate_users.js
+if %errorlevel% neq 0 (
+    echo.
+    echo [ERROR] Failed to create or update default users.
+    echo Check server\.env database settings and make sure MySQL is running.
+    pause
+    exit /b 1
+)
 cd ..
 
 echo.
-echo [STEP 4/5] Installing and Building Frontend...
+echo [STEP 5/6] Installing and Building Frontend...
 cd client
 call npm install
+if %errorlevel% neq 0 (
+    echo.
+    echo [ERROR] Frontend dependency installation failed.
+    pause
+    exit /b 1
+)
 echo Building optimized production files...
 call npm run build
+if %errorlevel% neq 0 (
+    echo.
+    echo [ERROR] Frontend build failed.
+    pause
+    exit /b 1
+)
 cd ..
 
 :: 4. Launch the application
 echo.
-echo [STEP 5/5] Launching Application...
+echo [STEP 6/6] Launching Application...
 echo.
 echo ***************************************************
 echo   SETUP COMPLETE! 
 echo   The app is now starting in two windows.
 echo   - Backend: http://localhost:5000
 echo   - Frontend: http://localhost:3000
+echo.
+echo   Login details:
+echo   - Admin: admin@gmail.com / admin123
+echo   - Employee: sajith@gmail.com / sajith123
 echo ***************************************************
 echo.
 
