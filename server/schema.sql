@@ -155,13 +155,16 @@ INSERT INTO services (vehicle_type_id, name, price)
 SELECT id, 'Foam Wash + Lubing', 250 FROM vehicle_types WHERE name = 'bike'
 ON DUPLICATE KEY UPDATE price = VALUES(price);
 INSERT INTO services (vehicle_type_id, name, price)
-SELECT id, 'Body Wash', 300 FROM vehicle_types WHERE name = 'car'
+SELECT id, 'Body Wash', 350 FROM vehicle_types WHERE name = 'car'
 ON DUPLICATE KEY UPDATE price = VALUES(price);
 INSERT INTO services (vehicle_type_id, name, price)
-SELECT id, 'Foam Wash', 400 FROM vehicle_types WHERE name = 'car'
+SELECT id, 'Foam Wash', 550 FROM vehicle_types WHERE name = 'car'
 ON DUPLICATE KEY UPDATE price = VALUES(price);
 INSERT INTO services (vehicle_type_id, name, price)
 SELECT id, 'Premium Wash', 600 FROM vehicle_types WHERE name = 'car'
+ON DUPLICATE KEY UPDATE price = VALUES(price);
+INSERT INTO services (vehicle_type_id, name, price)
+SELECT id, 'SUV', 700 FROM vehicle_types WHERE name = 'car'
 ON DUPLICATE KEY UPDATE price = VALUES(price);
 INSERT INTO services (vehicle_type_id, name, price)
 SELECT id, 'Water Wash', 400 FROM vehicle_types WHERE name = 'heavy'
@@ -175,8 +178,8 @@ ON DUPLICATE KEY UPDATE price = VALUES(price);
 
 -- Seed extra services
 INSERT INTO extra_services (name, price) VALUES
-  ('Under Body Coating', 500),
-  ('Interior Cleaning', 400),
+  ('Under Body Coating', 2000),
+  ('Interior Cleaning', 1500),
   ('Premium Wash', 600),
   ('Steaming', 350),
   ('AC Vent Cleaning', 300),

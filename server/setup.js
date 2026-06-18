@@ -132,9 +132,10 @@ async function seedCatalog(conn) {
     ['bike', 'Water Wash', 200],
     ['bike', 'Foam Wash', 200],
     ['bike', 'Foam Wash + Lubing', 250],
-    ['car', 'Body Wash', 300],
-    ['car', 'Foam Wash', 400],
+    ['car', 'Body Wash', 350],
+    ['car', 'Foam Wash', 550],
     ['car', 'Premium Wash', 600],
+    ['car', 'SUV', 700],
     ['heavy', 'Water Wash', 400],
     ['heavy', 'Foam Wash', 600],
     ['heavy', 'Foam Wash + Oiling', 800],
@@ -150,8 +151,8 @@ async function seedCatalog(conn) {
   }
 
   const extraRows = [
-    ['Under Body Coating', 500],
-    ['Interior Cleaning', 400],
+    ['Under Body Coating', 2000],
+    ['Interior Cleaning', 1500],
     ['Premium Wash', 600],
     ['Steaming', 350],
     ['AC Vent Cleaning', 300],
@@ -226,6 +227,9 @@ async function normalizeCatalog(conn) {
   await normalizeService(conn, 'bike', 'Normal Foam Wash', 'Foam Wash', 200);
   await normalizeService(conn, 'bike', 'Foam Wash', 'Foam Wash', 200);
   await normalizeService(conn, 'bike', 'Foam Wash + Lubing', 'Foam Wash + Lubing', 250);
+  await normalizeService(conn, 'car', 'Body Wash', 'Body Wash', 350);
+  await normalizeService(conn, 'car', 'Foam Wash', 'Foam Wash', 550);
+  await normalizeService(conn, 'car', 'SUV', 'SUV', 700);
 }
 
 async function setup() {
