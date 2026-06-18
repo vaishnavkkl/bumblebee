@@ -6,8 +6,21 @@ exports.createBill = async (req, res) => {
     await conn.beginTransaction();
     const { vehicle_type_id, vehicle_number, customer_mobile, service_id, extra_service_ids, total_amount, paid_amount, advance_amount, payment_mode, payment_status, created_by } = req.body;
     const billedBy = created_by || req.user.id;
-    // Fetch service price for historical accuracy
-    const [[service]] = await conn.query('SELECT price FROM services WHERE id = ?', [service_id]);
+    // Fetch canonical price for historical accuracy, even if old duplicate catalog rows exist.
+    const [[service]] = await conn.query(`
+      SELECT
+        CASE
+          WHEN LOWER(TRIM(vt.name)) = 'bike' AND LOWER(TRIM(s.name)) IN ('water wash', 'foam wash', 'normal foam wash') THEN 200
+          WHEN LOWER(TRIM(vt.name)) = 'bike' AND LOWER(TRIM(s.name)) = 'foam wash + lubing' THEN 250
+          WHEN LOWER(TRIM(vt.name)) = 'car' AND LOWER(TRIM(s.name)) = 'body wash' THEN 350
+          WHEN LOWER(TRIM(vt.name)) = 'car' AND LOWER(TRIM(s.name)) = 'foam wash' THEN 550
+          WHEN LOWER(TRIM(vt.name)) = 'car' AND LOWER(TRIM(s.name)) = 'suv' THEN 700
+          ELSE s.price
+        END AS price
+      FROM services s
+      JOIN vehicle_types vt ON s.vehicle_type_id = vt.id
+      WHERE s.id = ?
+    `, [service_id]);
     const service_price = service ? service.price : 0;
     const balance = total_amount - (paid_amount || 0) - (advance_amount || 0);
 
@@ -22,7 +35,17 @@ exports.createBill = async (req, res) => {
     // Insert extra services
     const uniqueExtraServiceIds = [...new Set(extra_service_ids || [])];
     if (uniqueExtraServiceIds.length > 0) {
-      const [extras] = await conn.query('SELECT id, price FROM extra_services WHERE id IN (?)', [uniqueExtraServiceIds]);
+      const [extras] = await conn.query(`
+        SELECT
+          id,
+          CASE
+            WHEN LOWER(TRIM(name)) = 'under body coating' THEN 2000
+            WHEN LOWER(TRIM(name)) = 'interior cleaning' THEN 1500
+            ELSE price
+          END AS price
+        FROM extra_services
+        WHERE id IN (?)
+      `, [uniqueExtraServiceIds]);
       for (const extra of extras) {
         await conn.query('INSERT IGNORE INTO bill_extras (bill_id, extra_service_id, price) VALUES (?, ?, ?)', [billId, extra.id, extra.price]);
       }

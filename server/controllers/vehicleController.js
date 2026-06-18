@@ -39,11 +39,17 @@ exports.getServices = async (req, res) => {
           WHEN c.normalized_vehicle_name = 'bike' AND c.service_key = 'foam wash' THEN 'Foam Wash'
           WHEN c.normalized_vehicle_name = 'bike' AND c.service_key = 'water wash' THEN 'Water Wash'
           WHEN c.normalized_vehicle_name = 'bike' AND c.service_key = 'foam wash + lubing' THEN 'Foam Wash + Lubing'
+          WHEN c.normalized_vehicle_name = 'car' AND c.service_key = 'body wash' THEN 'Body Wash'
+          WHEN c.normalized_vehicle_name = 'car' AND c.service_key = 'foam wash' THEN 'Foam Wash'
+          WHEN c.normalized_vehicle_name = 'car' AND c.service_key = 'suv' THEN 'SUV'
           ELSE MIN(c.service_name)
         END AS name,
         CASE
           WHEN c.normalized_vehicle_name = 'bike' AND c.service_key IN ('water wash', 'foam wash') THEN 200
           WHEN c.normalized_vehicle_name = 'bike' AND c.service_key = 'foam wash + lubing' THEN 250
+          WHEN c.normalized_vehicle_name = 'car' AND c.service_key = 'body wash' THEN 350
+          WHEN c.normalized_vehicle_name = 'car' AND c.service_key = 'foam wash' THEN 550
+          WHEN c.normalized_vehicle_name = 'car' AND c.service_key = 'suv' THEN 700
           ELSE MIN(c.price)
         END AS price,
         c.normalized_vehicle_name as vehicle_type_name
@@ -86,9 +92,23 @@ exports.getServices = async (req, res) => {
 exports.getExtraServices = async (req, res) => {
   try {
     const [extras] = await pool.query(`
-      SELECT MIN(id) AS id, MIN(TRIM(name)) AS name, MIN(price) AS price
-      FROM extra_services
-      GROUP BY LOWER(TRIM(name))
+      SELECT
+        MIN(id) AS id,
+        CASE normalized_name
+          WHEN 'under body coating' THEN 'Under Body Coating'
+          WHEN 'interior cleaning' THEN 'Interior Cleaning'
+          ELSE MIN(TRIM(name))
+        END AS name,
+        CASE normalized_name
+          WHEN 'under body coating' THEN 2000
+          WHEN 'interior cleaning' THEN 1500
+          ELSE MIN(price)
+        END AS price
+      FROM (
+        SELECT id, LOWER(TRIM(name)) AS normalized_name, name, price
+        FROM extra_services
+      ) e
+      GROUP BY normalized_name
       ORDER BY MIN(id)
     `);
     res.json(extras);
