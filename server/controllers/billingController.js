@@ -20,10 +20,11 @@ exports.createBill = async (req, res) => {
     const billId = result.insertId;
 
     // Insert extra services
-    if (extra_service_ids && extra_service_ids.length > 0) {
-      const [extras] = await conn.query('SELECT id, price FROM extra_services WHERE id IN (?)', [extra_service_ids]);
+    const uniqueExtraServiceIds = [...new Set(extra_service_ids || [])];
+    if (uniqueExtraServiceIds.length > 0) {
+      const [extras] = await conn.query('SELECT id, price FROM extra_services WHERE id IN (?)', [uniqueExtraServiceIds]);
       for (const extra of extras) {
-        await conn.query('INSERT INTO bill_extras (bill_id, extra_service_id, price) VALUES (?, ?, ?)', [billId, extra.id, extra.price]);
+        await conn.query('INSERT IGNORE INTO bill_extras (bill_id, extra_service_id, price) VALUES (?, ?, ?)', [billId, extra.id, extra.price]);
       }
     }
 
@@ -100,7 +101,12 @@ exports.getBills = async (req, res) => {
     // Fetch extras for each bill
     for (let bill of bills) {
       const [extras] = await pool.query(
-        `SELECT COALESCE(es.name, "Deleted Service") as name, be.price FROM bill_extras be LEFT JOIN extra_services es ON be.extra_service_id = es.id WHERE be.bill_id = ?`,
+        `SELECT COALESCE(es.name, "Deleted Service") as name, be.price
+         FROM bill_extras be
+         LEFT JOIN extra_services es ON be.extra_service_id = es.id
+         WHERE be.bill_id = ?
+         GROUP BY COALESCE(es.name, "Deleted Service"), be.price
+         ORDER BY MIN(be.id)`,
         [bill.id]
       );
       bill.extras = extras;

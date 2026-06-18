@@ -32,7 +32,8 @@ CREATE TABLE IF NOT EXISTS attendance (
 CREATE TABLE IF NOT EXISTS vehicle_types (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(50) NOT NULL,
-  label VARCHAR(50) NOT NULL
+  label VARCHAR(50) NOT NULL,
+  UNIQUE KEY unique_vehicle_type_name (name)
 );
 
 -- Services per Vehicle Type
@@ -41,6 +42,7 @@ CREATE TABLE IF NOT EXISTS services (
   vehicle_type_id INT NOT NULL,
   name VARCHAR(100) NOT NULL,
   price DECIMAL(10,2) DEFAULT 0,
+  UNIQUE KEY unique_service_vehicle_name (vehicle_type_id, name),
   FOREIGN KEY (vehicle_type_id) REFERENCES vehicle_types(id) ON DELETE CASCADE
 );
 
@@ -48,7 +50,8 @@ CREATE TABLE IF NOT EXISTS services (
 CREATE TABLE IF NOT EXISTS extra_services (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
-  price DECIMAL(10,2) DEFAULT 0
+  price DECIMAL(10,2) DEFAULT 0,
+  UNIQUE KEY unique_extra_service_name (name)
 );
 
 -- Bills
@@ -78,6 +81,7 @@ CREATE TABLE IF NOT EXISTS bill_extras (
   bill_id INT NOT NULL,
   extra_service_id INT NOT NULL,
   price DECIMAL(10,2) NOT NULL,
+  UNIQUE KEY unique_bill_extra_service (bill_id, extra_service_id),
   FOREIGN KEY (bill_id) REFERENCES bills(id) ON DELETE CASCADE,
   FOREIGN KEY (extra_service_id) REFERENCES extra_services(id)
 );
@@ -137,18 +141,37 @@ CREATE TABLE IF NOT EXISTS salary_payments (
 INSERT INTO vehicle_types (name, label) VALUES
   ('bike', 'Bike'),
   ('car', 'Car'),
-  ('heavy', 'Heavy Vehicle');
+  ('heavy', 'Heavy Vehicle')
+ON DUPLICATE KEY UPDATE label = VALUES(label);
 
 -- Seed services
-INSERT INTO services (vehicle_type_id, name, price) VALUES
-  (1, 'Body Wash', 100),
-  (1, 'Foam Wash + Lubing', 200),
-  (2, 'Body Wash', 300),
-  (2, 'Foam Wash', 400),
-  (2, 'Premium Wash', 600),
-  (3, 'Water Wash', 400),
-  (3, 'Foam Wash', 600),
-  (3, 'Foam Wash + Oiling', 800);
+INSERT INTO services (vehicle_type_id, name, price)
+SELECT id, 'Water Wash', 200 FROM vehicle_types WHERE name = 'bike'
+ON DUPLICATE KEY UPDATE price = VALUES(price);
+INSERT INTO services (vehicle_type_id, name, price)
+SELECT id, 'Foam Wash', 200 FROM vehicle_types WHERE name = 'bike'
+ON DUPLICATE KEY UPDATE price = VALUES(price);
+INSERT INTO services (vehicle_type_id, name, price)
+SELECT id, 'Foam Wash + Lubing', 250 FROM vehicle_types WHERE name = 'bike'
+ON DUPLICATE KEY UPDATE price = VALUES(price);
+INSERT INTO services (vehicle_type_id, name, price)
+SELECT id, 'Body Wash', 300 FROM vehicle_types WHERE name = 'car'
+ON DUPLICATE KEY UPDATE price = VALUES(price);
+INSERT INTO services (vehicle_type_id, name, price)
+SELECT id, 'Foam Wash', 400 FROM vehicle_types WHERE name = 'car'
+ON DUPLICATE KEY UPDATE price = VALUES(price);
+INSERT INTO services (vehicle_type_id, name, price)
+SELECT id, 'Premium Wash', 600 FROM vehicle_types WHERE name = 'car'
+ON DUPLICATE KEY UPDATE price = VALUES(price);
+INSERT INTO services (vehicle_type_id, name, price)
+SELECT id, 'Water Wash', 400 FROM vehicle_types WHERE name = 'heavy'
+ON DUPLICATE KEY UPDATE price = VALUES(price);
+INSERT INTO services (vehicle_type_id, name, price)
+SELECT id, 'Foam Wash', 600 FROM vehicle_types WHERE name = 'heavy'
+ON DUPLICATE KEY UPDATE price = VALUES(price);
+INSERT INTO services (vehicle_type_id, name, price)
+SELECT id, 'Foam Wash + Oiling', 800 FROM vehicle_types WHERE name = 'heavy'
+ON DUPLICATE KEY UPDATE price = VALUES(price);
 
 -- Seed extra services
 INSERT INTO extra_services (name, price) VALUES
@@ -158,8 +181,10 @@ INSERT INTO extra_services (name, price) VALUES
   ('Steaming', 350),
   ('AC Vent Cleaning', 300),
   ('Polishing', 800),
-  ('Painting', 1500);
+  ('Painting', 1500)
+ON DUPLICATE KEY UPDATE price = VALUES(price);
 
 -- Seed default admin (password: admin123)
 INSERT INTO users (name, phone, password_hash, role, salary) VALUES
-  ('Admin', '9999999999', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'admin', 0);
+  ('Admin', '9999999999', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'admin', 0)
+ON DUPLICATE KEY UPDATE role = VALUES(role), salary = VALUES(salary);

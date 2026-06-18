@@ -167,7 +167,7 @@ exports.getServicePopularity = async (req, res) => {
         SUM(b.total_amount) AS revenue_generated
       FROM bills b
       JOIN services s ON b.service_id = s.id
-      GROUP BY s.id, s.name
+      GROUP BY s.name
       ORDER BY usage_count DESC
     `);
     res.json(results);
