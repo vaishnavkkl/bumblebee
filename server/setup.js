@@ -15,6 +15,17 @@ async function addUniqueIndex(conn, table, indexName, columns) {
   }
 }
 
+async function addColumnIfMissing(conn, table, column, definition) {
+  const [columns] = await conn.query(
+    'SHOW COLUMNS FROM ?? LIKE ?',
+    [table, column]
+  );
+
+  if (columns.length === 0) {
+    await conn.query(`ALTER TABLE ?? ADD COLUMN ${definition}`, [table]);
+  }
+}
+
 async function cleanupCatalogDuplicates(conn) {
   await conn.query(`
     CREATE TEMPORARY TABLE vehicle_type_map AS
@@ -308,13 +319,17 @@ async function setup() {
       id INT AUTO_INCREMENT PRIMARY KEY,
       vehicle_type_id INT NOT NULL,
       vehicle_number VARCHAR(20) DEFAULT NULL,
+      customer_mobile VARCHAR(15) DEFAULT NULL,
       service_id INT NOT NULL,
+      service_price DECIMAL(10,2) DEFAULT 0,
       total_amount DECIMAL(10,2) NOT NULL,
       paid_amount DECIMAL(10,2) DEFAULT 0,
       advance_amount DECIMAL(10,2) DEFAULT 0,
       balance_amount DECIMAL(10,2) DEFAULT 0,
       payment_mode ENUM('cash', 'account', 'partial') DEFAULT 'cash',
+      payment_status ENUM('pending', 'paid') DEFAULT 'pending',
       wash_status ENUM('pending', 'in_progress', 'completed') DEFAULT 'pending',
+      wash_completed_at DATETIME NULL DEFAULT NULL,
       created_by INT NOT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -323,6 +338,11 @@ async function setup() {
       FOREIGN KEY (created_by) REFERENCES users(id)
     )
   `);
+
+  await addColumnIfMissing(conn, 'bills', 'customer_mobile', 'customer_mobile VARCHAR(15) DEFAULT NULL AFTER vehicle_number');
+  await addColumnIfMissing(conn, 'bills', 'service_price', 'service_price DECIMAL(10,2) DEFAULT 0 AFTER service_id');
+  await addColumnIfMissing(conn, 'bills', 'payment_status', "payment_status ENUM('pending', 'paid') DEFAULT 'pending' AFTER payment_mode");
+  await addColumnIfMissing(conn, 'bills', 'wash_completed_at', 'wash_completed_at DATETIME NULL DEFAULT NULL AFTER wash_status');
 
   await conn.query(`
     CREATE TABLE IF NOT EXISTS bill_extras (

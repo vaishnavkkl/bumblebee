@@ -38,25 +38,7 @@ echo DB_NAME=bumblebee_db >> server\.env
 echo JWT_SECRET=bumblebee_secret_key_2026 >> server\.env
 echo PORT=5000 >> server\.env
 
-echo [STEP 2/6] Seeding Database...
-:: Try to run mysql. Note: mysql must be in your System PATH
-mysql -u root -p"!DB_PASS!" < server\schema.sql
-if %errorlevel% neq 0 (
-    echo.
-    echo [WARNING] MySQL command failed. Make sure:
-    echo 1. MySQL is running.
-    echo 2. The 'mysql' command is in your System Environment Variables PATH.
-    echo 3. The password you entered is correct.
-    echo.
-    echo You can manually run the SQL in MySQL Workbench if this fails.
-    pause
-) else (
-    echo [SUCCESS] Database seeded successfully.
-)
-
-:: 3. Install Dependencies
-echo.
-echo [STEP 3/6] Installing Backend Dependencies...
+echo [STEP 2/6] Installing Backend Dependencies...
 cd server
 call npm install
 if %errorlevel% neq 0 (
@@ -64,8 +46,27 @@ if %errorlevel% neq 0 (
     echo [ERROR] Backend dependency installation failed.
     pause
     exit /b 1
+) else (
+    echo [SUCCESS] Backend dependencies installed.
 )
 
+echo.
+echo [STEP 3/6] Creating and Updating Database...
+node setup.js
+if %errorlevel% neq 0 (
+    echo.
+    echo [ERROR] Database setup failed. Make sure:
+    echo 1. MySQL is running.
+    echo 2. The password you entered is correct.
+    echo 3. server\.env has the correct database settings.
+    cd ..
+    pause
+    exit /b 1
+) else (
+    echo [SUCCESS] Database setup completed.
+)
+
+echo.
 echo.
 echo [STEP 4/6] Updating Default Users...
 node migrate_users.js
