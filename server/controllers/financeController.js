@@ -31,7 +31,7 @@ exports.getIncome = async (req, res) => {
     let pendingQuery = `
       SELECT NULL as real_id, CONCAT('bill_', b.id) as id, b.balance_amount as amount, 'pending' as type, 'wash' as source, CONCAT('Pending: ', b.vehicle_number) as description, DATE(b.created_at) as date, b.created_at, u.name as created_by_name
       FROM bills b JOIN users u ON b.created_by = u.id 
-      WHERE LOWER(b.payment_status) = 'pending' AND b.balance_amount > 0
+      WHERE LOWER(b.payment_status) = 'pending' AND b.balance_amount > 0 AND b.wash_status = 'completed'
     `;
     const pendingParams = [];
     if (startDate) { pendingQuery += ' AND DATE(b.created_at) >= ?'; pendingParams.push(startDate); }
@@ -86,7 +86,7 @@ exports.getDailyIncome = async (req, res) => {
         0 as account,
         SUM(balance_amount) as pending
       FROM bills
-      WHERE payment_status = 'pending' AND balance_amount > 0
+      WHERE payment_status = 'pending' AND balance_amount > 0 AND wash_status = 'completed'
     `;
     const pendingParams = [];
     if (startDate && endDate) {
@@ -149,6 +149,17 @@ exports.getExpenses = async (req, res) => {
     query += ' ORDER BY e.date DESC';
     const [records] = await pool.query(query, params);
     res.json(records);
+  } catch (err) { res.status(500).json({ message: err.message }); }
+};
+
+exports.deleteExpense = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [result] = await pool.query('DELETE FROM expenses WHERE id = ?', [id]);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Expense record not found' });
+    }
+    res.json({ message: 'Deleted successfully' });
   } catch (err) { res.status(500).json({ message: err.message }); }
 };
 

@@ -17,11 +17,22 @@ export default function PaymentHistory() {
   const [limit, setLimit] = useState(20);
 
   const getISTDate = () => {
-    const d = new Date();
-    const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
-    return new Date(utc + 19800000).toISOString().split('T')[0];
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(new Date());
+    const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+    return `${values.year}-${values.month}-${values.day}`;
   };
   const [date, setDate] = useState(getISTDate());
+
+  const formatPaymentDate = (value) => {
+    if (!value) return '-';
+    const [year, month, day] = value.split('-');
+    return `${day}/${month}/${year}`;
+  };
 
   const load = async () => {
     setLoading(true);
@@ -58,7 +69,7 @@ export default function PaymentHistory() {
     } catch { toast.error('Failed to update status'); }
   };
 
-  const colCount = isAdmin ? 9 : 7;
+  const colCount = isAdmin ? 10 : 8;
 
   return (
     <div className="fade-in">
@@ -78,7 +89,7 @@ export default function PaymentHistory() {
           <thead>
             <tr>
               <th>#</th><th>Vehicle</th><th>Amount</th><th>Mode</th>
-              <th>Type</th><th>Added By</th><th>Time</th>
+              <th>Type</th><th>Added By</th><th>Date</th><th>Time</th>
               {isAdmin && <th>Bill Action</th>}
               {isAdmin && <th>Delete</th>}
             </tr>
@@ -96,7 +107,8 @@ export default function PaymentHistory() {
                       <td><span className={`badge ${p.payment_mode === 'cash' ? 'badge-green' : 'badge-blue'}`}>{p.payment_mode}</span></td>
                       <td><span className={`badge ${p.is_advance ? 'badge-amber' : 'badge-blue'}`}>{p.is_advance ? 'Advance' : 'Payment'}</span></td>
                       <td>{p.created_by_name}</td>
-                      <td>{new Date(p.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</td>
+                      <td>{formatPaymentDate(p.payment_date)}</td>
+                      <td>{p.payment_time || '-'}</td>
                       {isAdmin && (
                         <td>
                           {p.bill_id && (

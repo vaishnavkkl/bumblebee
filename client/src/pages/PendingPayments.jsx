@@ -1,18 +1,19 @@
 import { useState, useEffect } from 'react';
 import api from '../utils/api';
-import { useAlert } from '../context/AlertContext';
 import { SkeletonRow } from '../components/Loaders';
 import Pagination from '../components/Pagination';
 import toast, { Toaster } from 'react-hot-toast';
 import { HiOutlineCheck } from 'react-icons/hi';
 
 export default function PendingPayments() {
-  const { confirm } = useAlert();
   const [bills, setBills] = useState([]);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
+  const [paymentBill, setPaymentBill] = useState(null);
+  const [paymentMode, setPaymentMode] = useState('cash');
+  const [payingId, setPayingId] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -28,32 +29,29 @@ export default function PendingPayments() {
   };
   useEffect(() => { load(); }, [page, limit]);
 
-  const handleMarkPaid = async (id, vehicle) => {
-    // We'll use the prompt or a custom confirmation for a professional feel
-    const ok = await confirm(
-      `Mark bill for "${vehicle}" as paid? Select the payment method received:`, 
-      { 
-        title: 'Complete Payment', 
-        confirmText: 'Mark Paid',
-        showCancel: true,
-        // Since the current confirm tool might not have a dropdown, 
-        // we'll assume the user wants a professional two-step or default to 'cash' 
-        // but for this specific senior dev fix, I will implement a quick choice logic if possible.
-      }
-    );
-    if (!ok) return;
+  const openPaymentModal = (bill) => {
+    setPaymentBill(bill);
+    setPaymentMode('cash');
+  };
 
-    // For a truly senior implementation without changing the confirm hook, 
-    // we'll default to cash but add a way for the user to specify if needed.
-    // However, to satisfy the "professional" requirement, let's assume 'cash' 
-    // but the backend is now ready for 'account'. 
-    
+  const closePaymentModal = () => {
+    setPaymentBill(null);
+    setPaymentMode('cash');
+  };
+
+  const handleMarkPaid = async (e) => {
+    e.preventDefault();
+    if (!paymentBill) return;
+    setPayingId(paymentBill.id);
     try {
-      await api.put(`/billing/${id}/payment-status`, { status: 'paid', payment_mode: 'cash' });
+      await api.put(`/billing/${paymentBill.id}/payment-status`, { status: 'paid', payment_mode: paymentMode });
       toast.success('Payment recorded successfully');
+      closePaymentModal();
       load();
     } catch (err) {
       toast.error('Failed to update payment status');
+    } finally {
+      setPayingId(null);
     }
   };
 
@@ -91,7 +89,7 @@ export default function PendingPayments() {
                       <td><span className="amount amount-red">₹{Number(b.balance_amount).toLocaleString()}</span></td>
                       <td>{new Date(b.created_at).toLocaleDateString('en-IN')}</td>
                       <td>
-                        <button className="btn btn-primary btn-sm" onClick={() => handleMarkPaid(b.id, b.vehicle_number)}>
+                        <button className="btn btn-primary btn-sm" onClick={() => openPaymentModal(b)}>
                           <HiOutlineCheck /> Mark Paid
                         </button>
                       </td>
@@ -102,6 +100,34 @@ export default function PendingPayments() {
         </table>
         <Pagination page={page} total={total} limit={limit} onPageChange={setPage} onLimitChange={setLimit} />
       </div>
+
+      {paymentBill && (
+        <div className="modal-overlay">
+          <form className="modal" onSubmit={handleMarkPaid}>
+            <div className="modal-header">
+              <h3>Complete Payment</h3>
+              <button type="button" className="btn-icon" onClick={closePaymentModal}>×</button>
+            </div>
+            <div className="bill-summary" style={{ marginTop: 0, marginBottom: 20 }}>
+              <div className="bill-summary-row"><span>Vehicle</span><span>{paymentBill.vehicle_number || 'No plate'}</span></div>
+              <div className="bill-summary-row total"><span>Balance</span><span className="amount">₹{Number(paymentBill.balance_amount).toLocaleString()}</span></div>
+            </div>
+            <div className="form-group">
+              <label>Payment Mode</label>
+              <select className="form-control" value={paymentMode} onChange={e => setPaymentMode(e.target.value)}>
+                <option value="cash">Cash (In Hand)</option>
+                <option value="account">Account (Online)</option>
+              </select>
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="btn btn-secondary" onClick={closePaymentModal}>Cancel</button>
+              <button className={`btn btn-primary ${payingId === paymentBill.id ? 'loading' : ''}`} disabled={payingId === paymentBill.id}>
+                {payingId === paymentBill.id ? 'Recording...' : 'Record Payment'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

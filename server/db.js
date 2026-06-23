@@ -14,4 +14,8 @@ const pool = mysql.createPool({
   dateStrings: true
 });
 
+pool.on('connection', (connection) => {
+  connection.query("SET time_zone = '+05:30'");
+});
+
 module.exports = pool;

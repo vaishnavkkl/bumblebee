@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS services (
   vehicle_type_id INT NOT NULL,
   name VARCHAR(100) NOT NULL,
   price DECIMAL(10,2) DEFAULT 0,
+  is_active TINYINT(1) DEFAULT 1,
   UNIQUE KEY unique_service_vehicle_name (vehicle_type_id, name),
   FOREIGN KEY (vehicle_type_id) REFERENCES vehicle_types(id) ON DELETE CASCADE
 );
@@ -51,6 +52,7 @@ CREATE TABLE IF NOT EXISTS extra_services (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
   price DECIMAL(10,2) DEFAULT 0,
+  is_active TINYINT(1) DEFAULT 1,
   UNIQUE KEY unique_extra_service_name (name)
 );
 
@@ -62,6 +64,7 @@ CREATE TABLE IF NOT EXISTS bills (
   customer_mobile VARCHAR(15) DEFAULT NULL,
   service_id INT NOT NULL,
   service_price DECIMAL(10,2) DEFAULT 0,
+  discount_amount DECIMAL(10,2) DEFAULT 0,
   total_amount DECIMAL(10,2) NOT NULL,
   paid_amount DECIMAL(10,2) DEFAULT 0,
   advance_amount DECIMAL(10,2) DEFAULT 0,

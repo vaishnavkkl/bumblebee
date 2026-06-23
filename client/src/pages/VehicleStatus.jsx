@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { BikeIcon, CarIcon, TruckIcon } from '../components/VehicleIcons';
 import { Spinner } from '../components/Loaders';
 import Pagination from '../components/Pagination';
+import { printBill } from '../utils/printBill';
 
 const statusColors = { in_progress: 'badge-blue', completed: 'badge-green' };
 const statusLabels = { in_progress: 'In Progress', completed: 'Completed' };
@@ -22,6 +23,8 @@ export default function VehicleStatus() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
+  const [completionBill, setCompletionBill] = useState(null);
+  const [completionPayment, setCompletionPayment] = useState({ payment_status: 'paid', payment_mode: 'cash', discount_amount: '' });
 
   const load = async () => {
     setLoading(true);
@@ -45,6 +48,64 @@ export default function VehicleStatus() {
     } catch { toast.error('Failed'); }
     finally { setUpdatingId(null); }
   };
+
+  const openCompletionModal = (bill) => {
+    setCompletionBill(bill);
+    setCompletionPayment({ payment_status: 'paid', payment_mode: 'cash', discount_amount: bill.discount_amount > 0 ? String(bill.discount_amount) : '' });
+  };
+
+  const closeCompletionModal = () => {
+    setCompletionBill(null);
+    setCompletionPayment({ payment_status: 'paid', payment_mode: 'cash', discount_amount: '' });
+  };
+
+  const completeWash = async (e) => {
+    e.preventDefault();
+    if (!completionBill) return;
+    const subtotal = Number(completionBill.total_amount || 0) + Number(completionBill.discount_amount || 0);
+    const discount = Number(completionPayment.discount_amount) || 0;
+    if (discount > subtotal) {
+      toast.error('Discount cannot be more than the service total');
+      return;
+    }
+    setUpdatingId(completionBill.id);
+    try {
+      const completedBill = {
+        ...completionBill,
+        subtotal: completionSubtotal,
+        discount_amount: discount,
+        total_amount: completionAmountDue,
+        payment_status: completionPayment.payment_status,
+        payment_mode: completionPayment.payment_mode,
+        wash_status: 'completed',
+        wash_completed_at: new Date().toISOString(),
+      };
+      await api.put(`/billing/${completionBill.id}/status`, {
+        status: 'completed',
+        payment_status: completionPayment.payment_status,
+        payment_mode: completionPayment.payment_mode,
+        discount_amount: discount,
+      });
+      toast.success('Wash completed');
+      closeCompletionModal();
+      const shouldPrint = await confirm('Wash completed. Do you want to print the final bill now?', {
+        title: 'Print Final Bill',
+        confirmText: 'Print',
+        variant: 'info',
+        icon: '🖨️',
+      });
+      if (shouldPrint) printBill(completedBill);
+      load();
+    } catch {
+      toast.error('Failed to complete wash');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const completionSubtotal = completionBill ? Number(completionBill.total_amount || 0) + Number(completionBill.discount_amount || 0) : 0;
+  const completionDiscount = Number(completionPayment.discount_amount) || 0;
+  const completionAmountDue = Math.max(0, completionSubtotal - completionDiscount);
 
   return (
     <div className="fade-in">
@@ -104,6 +165,9 @@ export default function VehicleStatus() {
                 <div className="wash-card-body">
                   <p><strong>{b.vehicle_type}</strong> · {b.service_name}</p>
                   <p>Amount: ₹{Number(b.total_amount).toLocaleString()}</p>
+                  {b.wash_status === 'completed' && (
+                    <p>Payment: <span className={`badge ${b.payment_status === 'paid' ? 'badge-green' : 'badge-amber'}`}>{b.payment_status}</span></p>
+                  )}
                   <p>By: {b.created_by_name}</p>
                   {user?.role === 'admin' && durationStr && <p style={{ color: 'var(--success)', fontWeight: 600, marginTop: 4 }}>Wash Time: {durationStr}</p>}
                   {b.extras?.length > 0 && <p style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>Extras: {b.extras.map(e => e.name).join(', ')}</p>}
@@ -111,7 +175,7 @@ export default function VehicleStatus() {
                 {nextStatus[b.wash_status] && (
                   <button
                     className={`btn btn-primary btn-sm wash-status-btn ${updatingId === b.id ? 'loading' : ''}`}
-                    onClick={() => updateStatus(b.id, nextStatus[b.wash_status], statusLabels[nextStatus[b.wash_status]])}
+                    onClick={() => nextStatus[b.wash_status] === 'completed' ? openCompletionModal(b) : updateStatus(b.id, nextStatus[b.wash_status], statusLabels[nextStatus[b.wash_status]])}
                     disabled={updatingId === b.id}
                   >
                     {updatingId === b.id
@@ -126,6 +190,66 @@ export default function VehicleStatus() {
         </div>
       )}
       <Pagination page={page} total={total} limit={limit} onPageChange={setPage} onLimitChange={setLimit} />
+
+      {completionBill && (
+        <div className="modal-overlay">
+          <form className="modal" onSubmit={completeWash}>
+            <div className="modal-header">
+              <h3>Complete Wash</h3>
+              <button type="button" className="btn-icon" onClick={closeCompletionModal}>×</button>
+            </div>
+            <div className="bill-summary" style={{ marginTop: 0, marginBottom: 20 }}>
+              <div className="bill-summary-row"><span>Vehicle</span><span>{completionBill.vehicle_number || 'No plate'}</span></div>
+              <div className="bill-summary-row"><span>Service</span><span>{completionBill.service_name}</span></div>
+              <div className="bill-summary-row"><span>Subtotal</span><span className="amount">₹{completionSubtotal.toLocaleString()}</span></div>
+              {completionDiscount > 0 && <div className="bill-summary-row"><span>Discount</span><span className="amount amount-red">-₹{completionDiscount.toLocaleString()}</span></div>}
+              <div className="bill-summary-row total"><span>Amount Due</span><span className="amount">₹{completionAmountDue.toLocaleString()}</span></div>
+            </div>
+            <div className="form-group">
+              <label>Discount</label>
+              <input
+                type="number"
+                min="0"
+                max={completionSubtotal}
+                className="form-control"
+                placeholder="0"
+                value={completionPayment.discount_amount}
+                onChange={e => setCompletionPayment(prev => ({ ...prev, discount_amount: e.target.value }))}
+              />
+            </div>
+            <div className="form-group">
+              <label>Payment Status</label>
+              <select
+                className="form-control"
+                value={completionPayment.payment_status}
+                onChange={e => setCompletionPayment(prev => ({ ...prev, payment_status: e.target.value }))}
+              >
+                <option value="paid">Paid</option>
+                <option value="pending">Pending</option>
+              </select>
+            </div>
+            {completionPayment.payment_status === 'paid' && (
+              <div className="form-group">
+                <label>Payment Mode</label>
+                <select
+                  className="form-control"
+                  value={completionPayment.payment_mode}
+                  onChange={e => setCompletionPayment(prev => ({ ...prev, payment_mode: e.target.value }))}
+                >
+                  <option value="cash">Cash (In Hand)</option>
+                  <option value="account">Account (Online)</option>
+                </select>
+              </div>
+            )}
+            <div className="modal-actions">
+              <button type="button" className="btn btn-secondary" onClick={closeCompletionModal}>Cancel</button>
+              <button className={`btn btn-primary ${updatingId === completionBill.id ? 'loading' : ''}`} disabled={updatingId === completionBill.id}>
+                {updatingId === completionBill.id ? <><Spinner size={14} /> Updating...</> : 'Complete Wash'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { Toaster } from 'react-hot-toast';
 import {
   BillIcon, PaymentHistoryIcon, CarWashStatusIcon, IncomeIcon, ExpenseIcon,
   TeamIcon, CalendarCheckIcon, HoursIcon, SalaryIcon, CustomerIcon,
-  MoneyStackIcon, WashIcon, DashboardIcon,
+  MoneyStackIcon, WashIcon, DashboardIcon, MaintenanceIcon,
 } from '../components/CarWashIcons';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { SkeletonCard, PageLoader } from '../components/Loaders';
@@ -21,6 +21,7 @@ const MODULES = [
   { label: 'Working Hours',   icon: <HoursIcon />,          path: '/employees/hours',       light: '#92400e', dark: '#fbbf24', desc: 'Hours summary' },
   { label: 'Salary',          icon: <SalaryIcon />,         path: '/employees/salary',      light: '#065f46', dark: '#34d399', desc: 'Payroll' },
   { label: 'Customers',       icon: <CustomerIcon />,       path: '/analytics/customers',   light: '#9d174d', dark: '#f472b6', desc: 'Retention analytics' },
+  { label: 'Services',        icon: <MaintenanceIcon />,    path: '/admin/services',        light: '#4338ca', dark: '#818cf8', desc: 'Manage service costs' },
 ];
 
 const COLORS = ['#f59e0b', '#3b82f6', '#10b981', '#ef4444', '#8b5cf6'];

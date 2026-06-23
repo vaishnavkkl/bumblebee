@@ -13,6 +13,7 @@ router.delete('/income/:id',    auth, adminOnly, ctrl.deleteIncome);
 router.post('/expenses',        auth, ctrl.addExpense);
 router.get('/expenses',         auth, ctrl.getExpenses);
 router.get('/expenses/daily',   auth, ctrl.getDailyExpenses);
+router.delete('/expenses/:id',  auth, adminOnly, ctrl.deleteExpense);
 
 // Financial report
 router.get('/report',           auth, adminOnly, ctrl.getFinancialReport);

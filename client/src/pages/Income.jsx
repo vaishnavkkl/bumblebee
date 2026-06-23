@@ -6,7 +6,9 @@ import {
   PieChart, Pie, Cell
 } from 'recharts';
 import { SkeletonRow, SkeletonCard, Spinner } from '../components/Loaders';
-import { HiOutlinePlus, HiOutlineTrash, HiOutlineExclamation, HiOutlineDatabase, HiOutlineCloudUpload } from 'react-icons/hi';
+import { HiOutlinePlus, HiOutlineTrash, HiOutlineExclamation, HiOutlineDatabase, HiOutlineCloudUpload, HiOutlineDownload } from 'react-icons/hi';
+import { buildExportFilename, exportRowsToExcel } from '../utils/exportExcel';
+import { useAlert } from '../context/AlertContext';
 
 const COLORS = ['#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#f43f5e', '#14b8a6'];
 const SOURCE_OPTIONS = ['wash', 'advance', 'balance_payment', 'other'];
@@ -46,6 +48,7 @@ const PieTooltip = ({ active, payload }) => {
 };
 
 export default function Income() {
+  const { danger } = useAlert();
   const [activeTab, setActiveTab] = useState('list'); // 'list' | 'report' | 'maintenance'
   const [startDate, setStartDate] = useState(getMonthRange().start);
   const [endDate, setEndDate] = useState(getMonthRange().end);
@@ -121,16 +124,29 @@ export default function Income() {
   };
 
   const handleDeleteIncome = async (id) => {
-    if (!window.confirm('Delete this record?')) return;
-    try { await api.delete(`/finance/income/${id}`); toast.success('Deleted'); setIncome(p => p.filter(i => i.id !== id)); } catch { toast.error('Failed'); }
+    const ok = await danger('Delete this income record? This cannot be undone.', {
+      title: 'Delete Income',
+      confirmText: 'Delete',
+    });
+    if (!ok) return;
+    try {
+      await api.delete(`/finance/income/${id}`);
+      toast.success('Income deleted');
+      fetchRecords();
+    } catch {
+      toast.error('Failed to delete income');
+    }
   };
 
   const setThisMonth = () => { const { start, end } = getMonthRange(); setStartDate(start); setEndDate(end); };
 
   // Maintenance Handlers
   const handleBulkDelete = async (type) => {
-    const confirm = window.confirm(`Are you absolutely sure you want to delete ${type} data between ${startDate} and ${endDate}? This cannot be undone!`);
-    if (!confirm) return;
+    const ok = await danger(`Delete ${type} data between ${startDate} and ${endDate}? This cannot be undone.`, {
+      title: 'Delete Data',
+      confirmText: 'Delete',
+    });
+    if (!ok) return;
     try {
       await api.post('/finance/bulk-delete', { startDate, endDate, type });
       toast.success('Data deleted successfully');
@@ -164,6 +180,25 @@ export default function Income() {
     toast('Google Drive integration requires API keys configured in settings.', { icon: 'ℹ️' });
   };
 
+  const handleExportIncome = () => {
+    exportRowsToExcel({
+      filename: buildExportFilename('income', startDate, endDate),
+      sheetName: 'Income',
+      title: `Income Records (${startDate} to ${endDate})`,
+      columns: [
+        { header: '#', value: (_row, index) => index + 1 },
+        { header: 'Amount', value: row => Number(row.amount || 0), type: 'number' },
+        { header: 'Type', value: row => row.type === 'in_hand' ? 'Cash' : row.type === 'account' ? 'Account' : 'Pending' },
+        { header: 'Source', value: row => (row.source || '').replace(/_/g, ' ') },
+        { header: 'Description', value: row => row.description || '' },
+        { header: 'Date', value: row => row.date ? new Date(row.date).toLocaleDateString('en-IN') : '' },
+        { header: 'Added By', value: row => row.created_by_name || '' },
+      ],
+      rows: income,
+    });
+    toast.success('Income Excel exported');
+  };
+
   return (
     <div className="fade-in">
       <Toaster position="top-center" />
@@ -176,6 +211,7 @@ export default function Income() {
           <button className={`btn btn-sm ${activeTab === 'list' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setActiveTab('list')}>📋 Records</button>
           <button className={`btn btn-sm ${activeTab === 'report' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setActiveTab('report')}>📊 Report</button>
           <button className={`btn btn-sm ${activeTab === 'maintenance' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setActiveTab('maintenance')}>⚙️ Maintenance</button>
+          {activeTab === 'list' && <button className="btn btn-secondary btn-sm" onClick={handleExportIncome} disabled={loading}><HiOutlineDownload /> Export Excel</button>}
           {activeTab === 'list' && <button className="btn btn-primary btn-sm" onClick={() => setShowModal(true)}><HiOutlinePlus /> Add Income</button>}
         </div>
       </div>

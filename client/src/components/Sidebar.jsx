@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import {
   DashboardIcon, BillIcon, PaymentHistoryIcon, CarWashStatusIcon,
   IncomeIcon, ExpenseIcon, PendingIcon, TeamIcon, CalendarCheckIcon,
-  HoursIcon, SalaryIcon, CustomerIcon, SecurityIcon,
+  HoursIcon, SalaryIcon, CustomerIcon, SecurityIcon, MaintenanceIcon,
 } from './CarWashIcons';
 
 export default function Sidebar() {
@@ -96,6 +96,9 @@ export default function Sidebar() {
         {isAdmin && (
           <div className="nav-section">
             <div className="nav-section-title">System</div>
+            <NavLink to="/admin/services" className={isActive('/admin/services')}>
+              <span className="nav-icon"><MaintenanceIcon /></span> Services
+            </NavLink>
             <NavLink to="/admin/security" className={isActive('/admin/security')}>
               <span className="nav-icon"><SecurityIcon /></span> Security & Data
             </NavLink>

@@ -5,6 +5,7 @@ import { useTheme } from '../context/ThemeContext';
 import { HiOutlineSun, HiOutlineMoon, HiOutlineLogout, HiOutlineChevronLeft, HiOutlineMenu } from 'react-icons/hi';
 import api from '../utils/api';
 import toast from 'react-hot-toast';
+import { useAlert } from '../context/AlertContext';
 
 const titles = {
   '/': 'Dashboard',
@@ -23,6 +24,7 @@ const titles = {
 export default function Header({ onToggleSidebar, sidebarOpen }) {
   const { user, logout, updateUser } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const { confirm } = useAlert();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -50,6 +52,16 @@ export default function Header({ onToggleSidebar, sidebarOpen }) {
     } finally {
       setIsUpdating(false);
     }
+  };
+
+  const handleLogout = async () => {
+    const ok = await confirm('Are you sure you want to logout?', {
+      title: 'Logout',
+      confirmText: 'Logout',
+      variant: 'warning',
+      icon: '↪',
+    });
+    if (ok) await logout();
   };
 
   return (
@@ -89,7 +101,7 @@ export default function Header({ onToggleSidebar, sidebarOpen }) {
             <span>{user?.name}</span>
             <span className="badge badge-amber" style={{ marginLeft: 4 }}>{user?.role}</span>
           </div>
-          <button className="btn-icon" onClick={logout} title="Logout">
+          <button className="btn-icon" onClick={handleLogout} title="Logout">
             <HiOutlineLogout />
           </button>
         </div>

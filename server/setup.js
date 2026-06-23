@@ -66,7 +66,10 @@ async function cleanupCatalogDuplicates(conn) {
     SELECT s.id AS old_id, keepers.keep_id AS new_id
     FROM services s
     JOIN (
-      SELECT vehicle_type_id, LOWER(TRIM(name)) AS normalized_name, MIN(id) AS keep_id
+      SELECT
+        vehicle_type_id,
+        LOWER(TRIM(name)) AS normalized_name,
+        CAST(SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY is_active DESC, id), ',', 1) AS UNSIGNED) AS keep_id
       FROM services
       GROUP BY vehicle_type_id, LOWER(TRIM(name))
     ) keepers
@@ -95,7 +98,9 @@ async function cleanupCatalogDuplicates(conn) {
     SELECT e.id AS old_id, keepers.keep_id AS new_id
     FROM extra_services e
     JOIN (
-      SELECT LOWER(TRIM(name)) AS normalized_name, MIN(id) AS keep_id
+      SELECT
+        LOWER(TRIM(name)) AS normalized_name,
+        CAST(SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY is_active DESC, id), ',', 1) AS UNSIGNED) AS keep_id
       FROM extra_services
       GROUP BY LOWER(TRIM(name))
     ) keepers ON LOWER(TRIM(e.name)) = keepers.normalized_name
@@ -300,6 +305,7 @@ async function setup() {
       vehicle_type_id INT NOT NULL,
       name VARCHAR(100) NOT NULL,
       price DECIMAL(10,2) DEFAULT 0,
+      is_active TINYINT(1) DEFAULT 1,
       UNIQUE KEY unique_service_vehicle_name (vehicle_type_id, name),
       FOREIGN KEY (vehicle_type_id) REFERENCES vehicle_types(id) ON DELETE CASCADE
     )
@@ -310,9 +316,13 @@ async function setup() {
       id INT AUTO_INCREMENT PRIMARY KEY,
       name VARCHAR(100) NOT NULL,
       price DECIMAL(10,2) DEFAULT 0,
+      is_active TINYINT(1) DEFAULT 1,
       UNIQUE KEY unique_extra_service_name (name)
     )
   `);
+
+  await addColumnIfMissing(conn, 'services', 'is_active', 'is_active TINYINT(1) DEFAULT 1 AFTER price');
+  await addColumnIfMissing(conn, 'extra_services', 'is_active', 'is_active TINYINT(1) DEFAULT 1 AFTER price');
 
   await conn.query(`
     CREATE TABLE IF NOT EXISTS bills (
@@ -322,6 +332,7 @@ async function setup() {
       customer_mobile VARCHAR(15) DEFAULT NULL,
       service_id INT NOT NULL,
       service_price DECIMAL(10,2) DEFAULT 0,
+      discount_amount DECIMAL(10,2) DEFAULT 0,
       total_amount DECIMAL(10,2) NOT NULL,
       paid_amount DECIMAL(10,2) DEFAULT 0,
       advance_amount DECIMAL(10,2) DEFAULT 0,
@@ -341,6 +352,7 @@ async function setup() {
 
   await addColumnIfMissing(conn, 'bills', 'customer_mobile', 'customer_mobile VARCHAR(15) DEFAULT NULL AFTER vehicle_number');
   await addColumnIfMissing(conn, 'bills', 'service_price', 'service_price DECIMAL(10,2) DEFAULT 0 AFTER service_id');
+  await addColumnIfMissing(conn, 'bills', 'discount_amount', 'discount_amount DECIMAL(10,2) DEFAULT 0 AFTER service_price');
   await addColumnIfMissing(conn, 'bills', 'payment_status', "payment_status ENUM('pending', 'paid') DEFAULT 'pending' AFTER payment_mode");
   await addColumnIfMissing(conn, 'bills', 'wash_completed_at', 'wash_completed_at DATETIME NULL DEFAULT NULL AFTER wash_status');
 

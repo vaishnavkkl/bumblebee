@@ -2,8 +2,11 @@ import { useState, useEffect, useCallback } from 'react';
 import api from '../utils/api';
 import toast, { Toaster } from 'react-hot-toast';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts';
-import { HiOutlinePlus } from 'react-icons/hi';
+import { HiOutlineDownload, HiOutlinePlus, HiOutlineTrash } from 'react-icons/hi';
 import { SkeletonRow, SkeletonCard, Spinner } from '../components/Loaders';
+import { buildExportFilename, exportRowsToExcel } from '../utils/exportExcel';
+import { useAlert } from '../context/AlertContext';
+import { useAuth } from '../context/AuthContext';
 
 const CATEGORY_COLORS = {
   Water: '#3b82f6', Electricity: '#f59e0b', Supplies: '#10b981',
@@ -30,6 +33,8 @@ const getMonthRange = () => {
 const formatCurrency = (v) => `₹${Number(v || 0).toLocaleString('en-IN')}`;
 
 export default function Expenses() {
+  const { danger } = useAlert();
+  const { isAdmin } = useAuth();
   const [expenses, setExpenses] = useState([]);
   const [chartData, setChartData] = useState([]);
   const [categoryTotals, setCategoryTotals] = useState([]);
@@ -97,6 +102,39 @@ export default function Expenses() {
     finally { setSaving(false); }
   };
 
+  const handleExportExpenses = () => {
+    exportRowsToExcel({
+      filename: buildExportFilename('expenses', startDate, endDate),
+      sheetName: 'Expenses',
+      title: `Expense Records (${startDate} to ${endDate})`,
+      columns: [
+        { header: '#', value: (_row, index) => index + 1 },
+        { header: 'Amount', value: row => Number(row.amount || 0), type: 'number' },
+        { header: 'Category', value: row => row.category || '' },
+        { header: 'Description', value: row => row.description || '' },
+        { header: 'Date', value: row => row.date ? new Date(row.date).toLocaleDateString('en-IN') : '' },
+        { header: 'Added By', value: row => row.created_by_name || '' },
+      ],
+      rows: expenses,
+    });
+    toast.success('Expenses Excel exported');
+  };
+
+  const handleDeleteExpense = async (id) => {
+    const ok = await danger('Delete this expense record? This cannot be undone.', {
+      title: 'Delete Expense',
+      confirmText: 'Delete',
+    });
+    if (!ok) return;
+    try {
+      await api.delete(`/finance/expenses/${id}`);
+      toast.success('Expense deleted');
+      fetchData();
+    } catch {
+      toast.error('Failed to delete expense');
+    }
+  };
+
   const totalExpenses = expenses.reduce((s, e) => s + Number(e.amount), 0);
   const salaryTotal = expenses.filter(e => e.category === 'salary').reduce((s, e) => s + Number(e.amount), 0);
   const opexTotal = totalExpenses - salaryTotal;
@@ -109,7 +147,10 @@ export default function Expenses() {
       <Toaster position="top-center" />
       <div className="page-header">
         <div><h2>Expense Tracking</h2><p>Track and analyse all expenses by date range and category</p></div>
-        <button className="btn btn-primary" onClick={() => setShowModal(true)}><HiOutlinePlus /> Add Expense</button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button className="btn btn-secondary" onClick={handleExportExpenses} disabled={loading}><HiOutlineDownload /> Export Excel</button>
+          <button className="btn btn-primary" onClick={() => setShowModal(true)}><HiOutlinePlus /> Add Expense</button>
+        </div>
       </div>
 
       {/* ── DATE RANGE FILTER BAR ── */}
@@ -214,13 +255,13 @@ export default function Expenses() {
       <div className="table-container">
         <table>
           <thead>
-            <tr><th>#</th><th>Amount</th><th>Category</th><th>Description</th><th>Date</th><th>Added By</th></tr>
+            <tr><th>#</th><th>Amount</th><th>Category</th><th>Description</th><th>Date</th><th>Added By</th>{isAdmin && <th></th>}</tr>
           </thead>
           <tbody>
             {loading
-              ? Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} cols={6} />)
+              ? Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} cols={isAdmin ? 7 : 6} />)
               : expenses.length === 0
-                ? <tr><td colSpan={6} style={{ textAlign: 'center', padding: 40, color: 'var(--text-tertiary)' }}>No expenses in this range</td></tr>
+                ? <tr><td colSpan={isAdmin ? 7 : 6} style={{ textAlign: 'center', padding: 40, color: 'var(--text-tertiary)' }}>No expenses in this range</td></tr>
                 : expenses.map((e, i) => (
                   <tr key={e.id}>
                     <td>{i + 1}</td>
@@ -237,6 +278,7 @@ export default function Expenses() {
                     <td>{e.description || '—'}</td>
                     <td>{new Date(e.date).toLocaleDateString('en-IN')}</td>
                     <td>{e.created_by_name}</td>
+                    {isAdmin && <td><button className="btn-icon" title="Delete expense" onClick={() => handleDeleteExpense(e.id)}><HiOutlineTrash size={16} /></button></td>}
                   </tr>
                 ))
             }

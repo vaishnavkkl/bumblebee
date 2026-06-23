@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import api from '../utils/api';
 import toast, { Toaster } from 'react-hot-toast';
 import { useAlert } from '../context/AlertContext';
@@ -7,7 +7,7 @@ import { BikeIcon, CarIcon, TruckIcon } from '../components/VehicleIcons';
 import { Spinner } from '../components/Loaders';
 
 export default function NewBill() {
-  const { alert: showAlert, confirm } = useAlert();
+  const { alert: showAlert, success } = useAlert();
   const [vehicleTypes, setVehicleTypes] = useState([]);
   const [services, setServices] = useState([]);
   const [extras, setExtras] = useState([]);
@@ -20,13 +20,19 @@ export default function NewBill() {
   const [selectedService, setSelectedService] = useState(null);
   const [selectedExtras, setSelectedExtras] = useState([]);
   const [vehicleNumber, setVehicleNumber] = useState('');
-  const [paymentMode, setPaymentMode] = useState('cash');
-  const [paymentStatus, setPaymentStatus] = useState('paid');
-  const [advanceAmount, setAdvanceAmount] = useState('');
   const [customerMobile, setCustomerMobile] = useState('');
   const [createdBy, setCreatedBy] = useState('');
+  const serviceSectionRef = useRef(null);
+  const extrasSectionRef = useRef(null);
+  const detailsSectionRef = useRef(null);
 
   const vtComponents = { bike: BikeIcon, car: CarIcon, heavy: TruckIcon };
+
+  const scrollToSection = (ref) => {
+    window.setTimeout(() => {
+      ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 80);
+  };
 
   useEffect(() => {
     setLoadingTypes(true);
@@ -48,18 +54,31 @@ export default function NewBill() {
         .then(r => setServices(r.data))
         .finally(() => setLoadingServices(false));
       setSelectedService(null);
+      setSelectedExtras([]);
+      scrollToSection(serviceSectionRef);
     }
   }, [selectedVT]);
+
+  useEffect(() => {
+    if (selectedService) scrollToSection(extrasSectionRef);
+  }, [selectedService]);
 
   const toggleExtra = (id) => {
     setSelectedExtras(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
 
+  const handleVehicleTypeSelect = (id) => {
+    setSelectedVT(id);
+  };
+
+  const handleServiceSelect = (id) => {
+    setSelectedService(id);
+    setSelectedExtras([]);
+  };
+
   const servicePrice = selectedService ? services.find(s => s.id === selectedService)?.price || 0 : 0;
   const extrasTotal = selectedExtras.reduce((sum, id) => sum + Number(extras.find(e => e.id === id)?.price || 0), 0);
   const totalAmount = Number(servicePrice) + extrasTotal;
-  const advance = Number(advanceAmount) || 0;
-  const paidAmount = paymentStatus === 'pending' ? 0 : totalAmount - advance;
 
   const handleVehicleNumberChange = (e) => {
     const raw = e.target.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
@@ -88,40 +107,23 @@ export default function NewBill() {
 
   const handleSubmit = async () => {
     if (!selectedVT || !selectedService) { showAlert('Please select a vehicle type and service.', { title: 'Missing Selection', icon: '🚗', variant: 'warning' }); return; }
-    if (!createdBy) { showAlert('Please select who is adding this payment.', { title: 'Select User', icon: '👤', variant: 'warning' }); return; }
+    if (!createdBy) { showAlert('Please select who is creating this bill.', { title: 'Select User', icon: '👤', variant: 'warning' }); return; }
+    setSubmitting(true);
     try {
       const response = await api.post('/billing', {
         vehicle_type_id: selectedVT, vehicle_number: vehicleNumber,
         customer_mobile: customerMobile,
         service_id: selectedService, extra_service_ids: selectedExtras,
-        total_amount: totalAmount, paid_amount: paidAmount,
-        advance_amount: advance, payment_mode: paymentMode,
-        payment_status: paymentStatus,
+        created_by: createdBy,
       });
       toast.success('Bill created successfully!');
-      
-      const printNow = await confirm('Do you want to print the receipt now?', { title: 'Print Receipt', confirmText: 'Print', variant: 'info', icon: '🖨️' });
-      if (printNow) {
-        handlePrintReceipt({
-          id: response.data.id,
-          vehicle_number: vehicleNumber,
-          customer_mobile: customerMobile,
-          vehicle_type: vehicleTypes.find(v => v.id === selectedVT)?.label,
-          service_name: services.find(s => s.id === selectedService)?.name,
-          service_price: services.find(s => s.id === selectedService)?.price,
-          extras: selectedExtras.map(id => {
-            const ext = extras.find(e => e.id === id);
-            return { name: ext?.name, price: ext?.price };
-          }),
-          total_amount: totalAmount,
-          paid_amount: paidAmount,
-          advance_amount: advance,
-          created_at: new Date().toISOString()
-        });
-      }
+      await success(
+        'Bill created and added to the wash queue. Complete the wash from Vehicle Status to record payment and print the final bill.',
+        { title: `Bill #${response.data.id} Created` }
+      );
 
       setSelectedVT(null); setSelectedService(null); setSelectedExtras([]);
-      setVehicleNumber(''); setCustomerMobile(''); setAdvanceAmount(''); setPaymentMode('cash'); setPaymentStatus('paid'); setCreatedBy('');
+      setVehicleNumber(''); setCustomerMobile(''); setCreatedBy('');
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to create bill');
     } finally { setSubmitting(false); }
@@ -143,7 +145,7 @@ export default function NewBill() {
     printWindow.document.write(`
       <html>
         <head>
-          <title>Bumblebee Receipt - #${bill.id}</title>
+          <title>Bumblebee Bill - #${bill.id}</title>
           <style>
             @page { margin: 0; }
             body { font-family: 'Courier New', Courier, monospace; width: 80mm; padding: 10mm; margin: 0; }
@@ -170,9 +172,9 @@ export default function NewBill() {
           </div>
           ${bill.extras && bill.extras.length > 0 ? `<div class="row" style="margin-top:5px; margin-bottom:2px;"><strong>Extras:</strong></div>${extrasHtml}` : ''}
           <div class="total">
-            <div class="row"><span>Total:</span> <span>₹${bill.total_amount}</span></div>
-            ${bill.advance_amount > 0 ? `<div class="row"><span>Advance Paid:</span> <span>₹${bill.advance_amount}</span></div>` : ''}
-            <div class="row"><span>Balance Paid:</span> <span>₹${bill.paid_amount}</span></div>
+            <div class="row"><span>Subtotal:</span> <span>₹${bill.subtotal}</span></div>
+            ${bill.discount_amount > 0 ? `<div class="row"><span>Discount:</span> <span>-₹${bill.discount_amount}</span></div>` : ''}
+            <div class="row"><span>Amount Due:</span> <span>₹${bill.total_amount}</span></div>
           </div>
           <div class="footer">
             <p>Thank you for visiting!</p>
@@ -208,10 +210,10 @@ export default function NewBill() {
             <div 
               key={vt.id} 
               className="vehicle-type-container"
-              onClick={() => setSelectedVT(vt.id)}
+              onClick={() => handleVehicleTypeSelect(vt.id)}
               style={{ cursor: 'pointer' }}
             >
-              <div className={`vehicle-type-card ${selectedVT === vt.id ? 'selected' : ''}`}>
+              <div className={`vehicle-type-card vehicle-type-${vt.name} ${selectedVT === vt.id ? 'selected' : ''}`}>
                 <div id={`vt-icon-${vt.id}`} className="vt-icon" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', width: '100%' }}>
                   {vtComponents[vt.name] ? (() => { 
                     const Comp = vtComponents[vt.name]; 
@@ -227,7 +229,7 @@ export default function NewBill() {
 
       {/* Step 2: Service */}
       {selectedVT && (
-        <>
+        <div ref={serviceSectionRef} className="bill-step-section">
           <h3 className="section-title">2. Select Service</h3>
           {loadingServices ? (
             <div className="service-chips">
@@ -236,7 +238,7 @@ export default function NewBill() {
           ) : (
             <div className="service-chips">
               {services.map(s => (
-                <div key={s.id} className={`service-chip ${selectedService === s.id ? 'selected' : ''}`} onClick={() => setSelectedService(s.id)}>
+                <div key={s.id} className={`service-chip ${selectedService === s.id ? 'selected' : ''}`} onClick={() => handleServiceSelect(s.id)}>
                   {selectedService === s.id && <HiOutlineCheck />}
                   {s.name}
                   <span className="chip-price">₹{Number(s.price)}</span>
@@ -244,12 +246,12 @@ export default function NewBill() {
               ))}
             </div>
           )}
-        </>
+        </div>
       )}
 
       {/* Step 3: Extras */}
       {selectedService && (
-        <>
+        <div ref={extrasSectionRef} className="bill-step-section">
           <h3 className="section-title">3. Extra Services <span style={{ color: 'var(--text-tertiary)', fontWeight: 400, fontSize: '0.8rem' }}>(Optional)</span></h3>
           <div className="extras-grid">
             {extras.map(ex => (
@@ -260,14 +262,21 @@ export default function NewBill() {
               </div>
             ))}
           </div>
-        </>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => scrollToSection(detailsSectionRef)}
+          >
+            Continue to Details
+          </button>
+        </div>
       )}
 
       {/* Step 4: Details */}
       {selectedService && (
-        <>
-          <h3 className="section-title">4. Vehicle & Payment Details</h3>
-          <div className="form-row-3">
+        <div ref={detailsSectionRef} className="bill-step-section">
+          <h3 className="section-title">4. Vehicle & Staff Details</h3>
+          <div className="form-row">
             <div className="form-group">
               <label>Vehicle Number</label>
               <div style={{ position: 'relative' }}>
@@ -275,33 +284,12 @@ export default function NewBill() {
               </div>
             </div>
             <div className="form-group">
-              <label>Payment Mode</label>
-              <select className="form-control" value={paymentMode} onChange={e => setPaymentMode(e.target.value)}>
-                <option value="cash">Cash (In Hand)</option>
-                <option value="account">Account (Online)</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label>Payment Status (Optional)</label>
-              <select className="form-control" value={paymentStatus} onChange={e => setPaymentStatus(e.target.value)}>
-                <option value="pending">Pending</option>
-                <option value="paid">Paid</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label>Advance Amount</label>
-              <input type="number" className="form-control" placeholder="0" value={advanceAmount} onChange={e => setAdvanceAmount(e.target.value)} />
-            </div>
-            <div className="form-group">
               <label>Customer Mobile (Optional)</label>
               <input type="text" className="form-control" placeholder="98XXXXXXXX" value={customerMobile} onChange={e => setCustomerMobile(e.target.value)} />
-              {paymentStatus === 'pending' && !customerMobile && (
-                <span style={{ fontSize: '0.7rem', color: 'var(--accent)', marginTop: 4, display: 'block' }}>⚠️ Recommended for pending payments</span>
-              )}
             </div>
           </div>
           <div className="form-group">
-            <label>Payment Added By</label>
+            <label>Bill Created By</label>
             <select className="form-control" value={createdBy} onChange={e => setCreatedBy(e.target.value)} required>
               <option value="">Select user</option>
               {users.map(u => <option key={u.id} value={u.id}>{u.name} ({u.role})</option>)}
@@ -312,8 +300,7 @@ export default function NewBill() {
           <div className="bill-summary">
             <div className="bill-summary-row"><span>Service</span><span className="amount">₹{Number(servicePrice).toLocaleString()}</span></div>
             {selectedExtras.length > 0 && <div className="bill-summary-row"><span>Extras ({selectedExtras.length})</span><span className="amount">₹{extrasTotal.toLocaleString()}</span></div>}
-            {advance > 0 && <div className="bill-summary-row"><span>Advance</span><span className="amount amount-red">-₹{advance.toLocaleString()}</span></div>}
-            <div className="bill-summary-row total"><span>Total</span><span className="amount">₹{totalAmount.toLocaleString()}</span></div>
+            <div className="bill-summary-row total"><span>Estimated Amount Due After Wash</span><span className="amount">₹{totalAmount.toLocaleString()}</span></div>
           </div>
 
           <button
@@ -327,7 +314,7 @@ export default function NewBill() {
               : `Create Bill — ₹${totalAmount.toLocaleString()}`
             }
           </button>
-        </>
+        </div>
       )}
     </div>
   );

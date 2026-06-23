@@ -58,7 +58,16 @@ echo.
 start "Bumblebee Backend" /D "%~dp0server" cmd /k npm start
 start "Bumblebee Frontend" /D "%~dp0client" cmd /k npm run preview -- --host --port 3000
 
-timeout /t 3 /nobreak >nul
+echo Waiting for backend to become ready...
+powershell -NoProfile -Command "$ready = $false; for ($i = 1; $i -le 30; $i++) { try { $r = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:5000/api/health' -TimeoutSec 2; if ($r.StatusCode -eq 200) { $ready = $true; break } } catch { Start-Sleep -Seconds 1 } }; if (-not $ready) { exit 1 }" >nul 2>&1
+if errorlevel 1 (
+    echo.
+    echo [WARNING] Backend did not report ready yet.
+    echo Check the backend window for database or startup errors.
+) else (
+    echo Backend is ready.
+)
+
 start "" "http://localhost:3000"
 
 echo App is starting. You can close this window.
