@@ -325,11 +325,27 @@ async function setup() {
   await addColumnIfMissing(conn, 'extra_services', 'is_active', 'is_active TINYINT(1) DEFAULT 1 AFTER price');
 
   await conn.query(`
+    CREATE TABLE IF NOT EXISTS workshops (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(120) NOT NULL,
+      contact_person VARCHAR(100) DEFAULT NULL,
+      phone VARCHAR(20) DEFAULT NULL,
+      address TEXT DEFAULT NULL,
+      notes TEXT DEFAULT NULL,
+      is_active TINYINT(1) DEFAULT 1,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY unique_workshop_name (name)
+    )
+  `);
+
+  await conn.query(`
     CREATE TABLE IF NOT EXISTS bills (
       id INT AUTO_INCREMENT PRIMARY KEY,
       vehicle_type_id INT NOT NULL,
       vehicle_number VARCHAR(20) DEFAULT NULL,
       customer_mobile VARCHAR(15) DEFAULT NULL,
+      workshop_id INT DEFAULT NULL,
       service_id INT NOT NULL,
       service_price DECIMAL(10,2) DEFAULT 0,
       discount_amount DECIMAL(10,2) DEFAULT 0,
@@ -351,6 +367,7 @@ async function setup() {
   `);
 
   await addColumnIfMissing(conn, 'bills', 'customer_mobile', 'customer_mobile VARCHAR(15) DEFAULT NULL AFTER vehicle_number');
+  await addColumnIfMissing(conn, 'bills', 'workshop_id', 'workshop_id INT DEFAULT NULL AFTER customer_mobile');
   await addColumnIfMissing(conn, 'bills', 'service_price', 'service_price DECIMAL(10,2) DEFAULT 0 AFTER service_id');
   await addColumnIfMissing(conn, 'bills', 'discount_amount', 'discount_amount DECIMAL(10,2) DEFAULT 0 AFTER service_price');
   await addColumnIfMissing(conn, 'bills', 'payment_status', "payment_status ENUM('pending', 'paid') DEFAULT 'pending' AFTER payment_mode");
@@ -398,6 +415,25 @@ async function setup() {
   `);
 
   await conn.query(`
+    CREATE TABLE IF NOT EXISTS expense_categories (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(100) NOT NULL,
+      is_active TINYINT(1) DEFAULT 1,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY unique_expense_category_name (name)
+    )
+  `);
+
+  const expenseCategoryRows = ['Water', 'Electricity', 'Supplies', 'Maintenance', 'Rent', 'Food', 'salary', 'Other'];
+  for (const name of expenseCategoryRows) {
+    await conn.query(
+      'INSERT INTO expense_categories (name, is_active) VALUES (?, 1) ON DUPLICATE KEY UPDATE is_active = VALUES(is_active)',
+      [name]
+    );
+  }
+
+  await conn.query(`
     CREATE TABLE IF NOT EXISTS expenses (
       id INT AUTO_INCREMENT PRIMARY KEY,
       amount DECIMAL(10,2) NOT NULL,
@@ -411,17 +447,29 @@ async function setup() {
   `);
 
   await conn.query(`
+    INSERT IGNORE INTO expense_categories (name, is_active)
+    SELECT DISTINCT TRIM(category), 1
+    FROM expenses
+    WHERE category IS NOT NULL AND TRIM(category) <> ''
+  `);
+
+  await conn.query(`
     CREATE TABLE IF NOT EXISTS salary_payments (
       id INT AUTO_INCREMENT PRIMARY KEY,
       user_id INT NOT NULL,
       amount DECIMAL(10,2) NOT NULL,
+      type ENUM('salary', 'advance') DEFAULT 'salary',
       month VARCHAR(7) NOT NULL,
       paid_date DATE NOT NULL,
       notes TEXT DEFAULT NULL,
+      expense_id INT DEFAULT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
   `);
+
+  await addColumnIfMissing(conn, 'salary_payments', 'type', "type ENUM('salary', 'advance') DEFAULT 'salary' AFTER amount");
+  await addColumnIfMissing(conn, 'salary_payments', 'expense_id', 'expense_id INT DEFAULT NULL AFTER notes');
 
   await cleanupCatalogDuplicates(conn);
   await addUniqueIndex(conn, 'vehicle_types', 'unique_vehicle_type_name', 'name');

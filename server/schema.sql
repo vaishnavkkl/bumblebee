@@ -56,12 +56,27 @@ CREATE TABLE IF NOT EXISTS extra_services (
   UNIQUE KEY unique_extra_service_name (name)
 );
 
+-- Workshops / Bulk Wash Sources
+CREATE TABLE IF NOT EXISTS workshops (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(120) NOT NULL,
+  contact_person VARCHAR(100) DEFAULT NULL,
+  phone VARCHAR(20) DEFAULT NULL,
+  address TEXT DEFAULT NULL,
+  notes TEXT DEFAULT NULL,
+  is_active TINYINT(1) DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY unique_workshop_name (name)
+);
+
 -- Bills
 CREATE TABLE IF NOT EXISTS bills (
   id INT AUTO_INCREMENT PRIMARY KEY,
   vehicle_type_id INT NOT NULL,
   vehicle_number VARCHAR(20) DEFAULT NULL,
   customer_mobile VARCHAR(15) DEFAULT NULL,
+  workshop_id INT DEFAULT NULL,
   service_id INT NOT NULL,
   service_price DECIMAL(10,2) DEFAULT 0,
   discount_amount DECIMAL(10,2) DEFAULT 0,
@@ -77,6 +92,7 @@ CREATE TABLE IF NOT EXISTS bills (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (vehicle_type_id) REFERENCES vehicle_types(id),
+  FOREIGN KEY (workshop_id) REFERENCES workshops(id),
   FOREIGN KEY (service_id) REFERENCES services(id),
   FOREIGN KEY (created_by) REFERENCES users(id)
 );
@@ -120,6 +136,26 @@ CREATE TABLE IF NOT EXISTS income (
 );
 
 -- Expenses
+CREATE TABLE IF NOT EXISTS expense_categories (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  is_active TINYINT(1) DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY unique_expense_category_name (name)
+);
+
+INSERT INTO expense_categories (name, is_active) VALUES
+  ('Water', 1),
+  ('Electricity', 1),
+  ('Supplies', 1),
+  ('Maintenance', 1),
+  ('Rent', 1),
+  ('Food', 1),
+  ('salary', 1),
+  ('Other', 1)
+ON DUPLICATE KEY UPDATE is_active = VALUES(is_active);
+
 CREATE TABLE IF NOT EXISTS expenses (
   id INT AUTO_INCREMENT PRIMARY KEY,
   amount DECIMAL(10,2) NOT NULL,
@@ -136,9 +172,11 @@ CREATE TABLE IF NOT EXISTS salary_payments (
   id INT AUTO_INCREMENT PRIMARY KEY,
   user_id INT NOT NULL,
   amount DECIMAL(10,2) NOT NULL,
+  type ENUM('salary', 'advance') DEFAULT 'salary',
   month VARCHAR(7) NOT NULL,
   paid_date DATE NOT NULL,
   notes TEXT DEFAULT NULL,
+  expense_id INT DEFAULT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );

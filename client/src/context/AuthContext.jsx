@@ -22,14 +22,20 @@ export function AuthProvider({ children }) {
 
   const login = async (identifier, password) => {
     // backend accepts name or phone number in the `phone` field
-    let res;
-    try {
-      res = await api.post('/auth/login', { phone: identifier, password });
-    } catch (err) {
-      if (err.response) throw err;
-      await new Promise(resolve => setTimeout(resolve, 700));
-      res = await api.post('/auth/login', { phone: identifier, password });
+    let res = null;
+    let lastError = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        res = await api.post('/auth/login', { phone: identifier, password });
+        break;
+      } catch (err) {
+        if (err.response) throw err;
+        lastError = err;
+        await new Promise(resolve => setTimeout(resolve, 500 + attempt * 700));
+      }
     }
+    if (!res) throw lastError;
+
     const { token: t, user: u } = res.data;
     localStorage.setItem('bb-token', t);
     api.defaults.headers.common['Authorization'] = `Bearer ${t}`;

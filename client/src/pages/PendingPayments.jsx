@@ -3,9 +3,11 @@ import api from '../utils/api';
 import { SkeletonRow } from '../components/Loaders';
 import Pagination from '../components/Pagination';
 import toast, { Toaster } from 'react-hot-toast';
-import { HiOutlineCheck } from 'react-icons/hi';
+import { HiOutlineCheck, HiOutlineTrash } from 'react-icons/hi';
+import { useAlert } from '../context/AlertContext';
 
 export default function PendingPayments() {
+  const { danger } = useAlert();
   const [bills, setBills] = useState([]);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
@@ -14,6 +16,7 @@ export default function PendingPayments() {
   const [paymentBill, setPaymentBill] = useState(null);
   const [paymentMode, setPaymentMode] = useState('cash');
   const [payingId, setPayingId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -55,6 +58,24 @@ export default function PendingPayments() {
     }
   };
 
+  const handleDeleteBill = async (bill) => {
+    const ok = await danger(`Delete pending bill #${bill.id}? This cannot be undone.`, {
+      title: 'Delete Pending Bill',
+      confirmText: 'Delete',
+    });
+    if (!ok) return;
+    setDeletingId(bill.id);
+    try {
+      await api.delete(`/billing/${bill.id}`);
+      toast.success('Pending bill deleted');
+      load();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Failed to delete bill');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
     <div className="fade-in">
       <Toaster position="top-center" />
@@ -85,13 +106,18 @@ export default function PendingPayments() {
                       <td>#{b.id}</td>
                       <td>{b.vehicle_number || '—'}</td>
                       <td>{b.customer_mobile || '—'}</td>
-                      <td>₹{Number(b.total_amount).toLocaleString()}</td>
-                      <td><span className="amount amount-red">₹{Number(b.balance_amount).toLocaleString()}</span></td>
+                      <td>Rs. {Number(b.total_amount).toLocaleString()}</td>
+                      <td><span className="amount amount-red">Rs. {Number(b.balance_amount).toLocaleString()}</span></td>
                       <td>{new Date(b.created_at).toLocaleDateString('en-IN')}</td>
                       <td>
-                        <button className="btn btn-primary btn-sm" onClick={() => openPaymentModal(b)}>
-                          <HiOutlineCheck /> Mark Paid
-                        </button>
+                        <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                          <button className="btn btn-primary btn-sm" onClick={() => openPaymentModal(b)}>
+                            <HiOutlineCheck /> Mark Paid
+                          </button>
+                          <button className="btn btn-secondary btn-sm" onClick={() => handleDeleteBill(b)} disabled={deletingId === b.id}>
+                            <HiOutlineTrash /> {deletingId === b.id ? 'Deleting...' : 'Delete'}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -110,7 +136,7 @@ export default function PendingPayments() {
             </div>
             <div className="bill-summary" style={{ marginTop: 0, marginBottom: 20 }}>
               <div className="bill-summary-row"><span>Vehicle</span><span>{paymentBill.vehicle_number || 'No plate'}</span></div>
-              <div className="bill-summary-row total"><span>Balance</span><span className="amount">₹{Number(paymentBill.balance_amount).toLocaleString()}</span></div>
+              <div className="bill-summary-row total"><span>Balance</span><span className="amount">Rs. {Number(paymentBill.balance_amount).toLocaleString()}</span></div>
             </div>
             <div className="form-group">
               <label>Payment Mode</label>

@@ -1175,8 +1175,29 @@ tbody tr:hover td { background: var(--bg-hover); }
   margin-bottom: 4px;
 }
 
-.wash-status-btn {
+.wash-card-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   margin-top: 12px;
+}
+
+.wash-card-primary-action .btn,
+.wash-card-secondary-actions .btn {
+  width: 100%;
+  min-height: 34px;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.wash-card-secondary-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+  gap: 8px;
+}
+
+.wash-status-btn {
+  margin-top: 0;
   width: 100%;
 }
 

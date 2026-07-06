@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import api from '../utils/api';
 import toast, { Toaster } from 'react-hot-toast';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts';
-import { HiOutlineDownload, HiOutlinePlus, HiOutlineTrash } from 'react-icons/hi';
+import { HiOutlineDownload, HiOutlinePlus, HiOutlinePencil, HiOutlineTrash } from 'react-icons/hi';
 import { SkeletonRow, SkeletonCard, Spinner } from '../components/Loaders';
 import { buildExportFilename, exportRowsToExcel } from '../utils/exportExcel';
 import { useAlert } from '../context/AlertContext';
@@ -14,7 +14,7 @@ const CATEGORY_COLORS = {
   salary: '#f97316', Other: '#6b7280',
 };
 const ALL_COLORS = Object.values(CATEGORY_COLORS);
-const CATEGORIES = ['Water', 'Electricity', 'Supplies', 'Maintenance', 'Rent', 'Food', 'salary', 'Other'];
+const DEFAULT_CATEGORIES = ['Water', 'Electricity', 'Supplies', 'Maintenance', 'Rent', 'Food', 'salary', 'Other'];
 
 const getISTDate = (offsetDays = 0) => {
   const now = new Date();
@@ -41,14 +41,28 @@ export default function Expenses() {
   const [loading, setLoading] = useState(false);
   const [chartLoading, setChartLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [editingExpenseId, setEditingExpenseId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [expenseCategories, setExpenseCategories] = useState(DEFAULT_CATEGORIES);
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [categoryName, setCategoryName] = useState('');
+  const [categorySaving, setCategorySaving] = useState(false);
 
   const { start: defaultStart, end: defaultEnd } = getMonthRange();
   const [startDate, setStartDate] = useState(defaultStart);
   const [endDate, setEndDate] = useState(defaultEnd);
 
   const [form, setForm] = useState({ amount: '', category: '', description: '', date: getISTDate() });
+
+  const fetchCategories = useCallback(() => {
+    api.get('/finance/expense-categories')
+      .then((res) => {
+        const names = res.data.map((category) => category.name).filter(Boolean);
+        setExpenseCategories([...new Set([...names, ...DEFAULT_CATEGORIES])]);
+      })
+      .catch(() => setExpenseCategories(DEFAULT_CATEGORIES));
+  }, []);
 
   const fetchData = useCallback(() => {
     setLoading(true);
@@ -81,6 +95,7 @@ export default function Expenses() {
       .finally(() => { setLoading(false); setChartLoading(false); });
   }, [startDate, endDate, categoryFilter]);
 
+  useEffect(() => { fetchCategories(); }, [fetchCategories]);
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const setThisMonth = () => {
@@ -89,16 +104,46 @@ export default function Expenses() {
     setEndDate(end);
   };
 
+  const resetExpenseForm = () => {
+    setEditingExpenseId(null);
+    setForm({ amount: '', category: '', description: '', date: getISTDate() });
+  };
+
+  const openAddExpense = () => {
+    resetExpenseForm();
+    setShowModal(true);
+  };
+
+  const openEditExpense = (expense) => {
+    setEditingExpenseId(expense.id);
+    setForm({
+      amount: String(expense.amount || ''),
+      category: expense.category || '',
+      description: expense.description || '',
+      date: expense.date ? String(expense.date).slice(0, 10) : getISTDate(),
+    });
+    setShowModal(true);
+  };
+
+  const closeExpenseModal = () => {
+    setShowModal(false);
+    resetExpenseForm();
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
     try {
-      await api.post('/finance/expenses', form);
-      toast.success('Expense added');
-      setShowModal(false);
-      setForm({ amount: '', category: '', description: '', date: getISTDate() });
+      if (editingExpenseId) {
+        await api.put(`/finance/expenses/${editingExpenseId}`, form);
+        toast.success('Expense updated');
+      } else {
+        await api.post('/finance/expenses', form);
+        toast.success('Expense added');
+      }
+      closeExpenseModal();
       fetchData();
-    } catch { toast.error('Failed'); }
+    } catch (err) { toast.error(err?.response?.data?.message || 'Failed'); }
     finally { setSaving(false); }
   };
 
@@ -118,6 +163,25 @@ export default function Expenses() {
       rows: expenses,
     });
     toast.success('Expenses Excel exported');
+  };
+
+  const handleAddCategory = async (e) => {
+    e.preventDefault();
+    const name = categoryName.trim();
+    if (!name) return toast.error('Enter category name');
+    setCategorySaving(true);
+    try {
+      await api.post('/finance/expense-categories', { name });
+      toast.success('Expense category added');
+      setCategoryName('');
+      setShowCategoryModal(false);
+      fetchCategories();
+      setForm((current) => ({ ...current, category: name }));
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Failed to add category');
+    } finally {
+      setCategorySaving(false);
+    }
   };
 
   const handleDeleteExpense = async (id) => {
@@ -141,6 +205,7 @@ export default function Expenses() {
 
   // Unique categories present in current data (for stacked bar legend)
   const presentCategories = [...new Set(chartData.flatMap(d => Object.keys(d).filter(k => k !== 'date')))];
+  const manualCategories = expenseCategories.filter((category) => category.toLowerCase() !== 'salary');
 
   return (
     <div className="fade-in">
@@ -149,7 +214,8 @@ export default function Expenses() {
         <div><h2>Expense Tracking</h2><p>Track and analyse all expenses by date range and category</p></div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn btn-secondary" onClick={handleExportExpenses} disabled={loading}><HiOutlineDownload /> Export Excel</button>
-          <button className="btn btn-primary" onClick={() => setShowModal(true)}><HiOutlinePlus /> Add Expense</button>
+          {isAdmin && <button className="btn btn-secondary" onClick={() => setShowCategoryModal(true)}><HiOutlinePlus /> Add Category</button>}
+          <button className="btn btn-primary" onClick={openAddExpense}><HiOutlinePlus /> Add Expense</button>
         </div>
       </div>
 
@@ -169,7 +235,7 @@ export default function Expenses() {
         <select className="form-control" style={{ width: 'auto' }} value={categoryFilter}
           onChange={e => setCategoryFilter(e.target.value)}>
           <option value="">All Categories</option>
-          {CATEGORIES.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
+          {expenseCategories.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
         </select>
         {loading && <div className="dot-loader"><span /><span /><span /></div>}
       </div>
@@ -278,7 +344,18 @@ export default function Expenses() {
                     <td>{e.description || '—'}</td>
                     <td>{new Date(e.date).toLocaleDateString('en-IN')}</td>
                     <td>{e.created_by_name}</td>
-                    {isAdmin && <td><button className="btn-icon" title="Delete expense" onClick={() => handleDeleteExpense(e.id)}><HiOutlineTrash size={16} /></button></td>}
+                    {isAdmin && (
+                      <td>
+                        {e.category === 'salary' ? (
+                          <span style={{ color: 'var(--text-tertiary)', fontSize: '0.78rem' }}>Managed in Salary</span>
+                        ) : (
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
+                            <button className="btn-icon" title="Edit expense" onClick={() => openEditExpense(e)}><HiOutlinePencil size={16} /></button>
+                            <button className="btn-icon" title="Delete expense" onClick={() => handleDeleteExpense(e.id)}><HiOutlineTrash size={16} /></button>
+                          </div>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))
             }
@@ -287,26 +364,55 @@ export default function Expenses() {
       </div>
 
       {/* ── ADD MODAL ── */}
+      {showCategoryModal && (
+        <div className="modal-overlay" onClick={() => setShowCategoryModal(false)}>
+          <form className="modal" onSubmit={handleAddCategory} onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Add Expense Category</h3>
+              <button type="button" className="btn-icon" onClick={() => setShowCategoryModal(false)}>X</button>
+            </div>
+            <div className="form-group">
+              <label>Category Name</label>
+              <input
+                type="text"
+                className="form-control"
+                value={categoryName}
+                onChange={e => setCategoryName(e.target.value)}
+                placeholder="Example: Diesel"
+                maxLength={100}
+                required
+              />
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="btn btn-secondary" onClick={() => setShowCategoryModal(false)}>Cancel</button>
+              <button type="submit" className={`btn btn-primary ${categorySaving ? 'loading' : ''}`} disabled={categorySaving}>
+                {categorySaving ? 'Saving...' : 'Add Category'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+        <div className="modal-overlay" onClick={closeExpenseModal}>
           <div className="modal" onClick={ex => ex.stopPropagation()}>
-            <div className="modal-header"><h3>Add Expense</h3><button className="btn-icon" onClick={() => setShowModal(false)}>✕</button></div>
+            <div className="modal-header"><h3>{editingExpenseId ? 'Edit Expense' : 'Add Expense'}</h3><button className="btn-icon" onClick={closeExpenseModal}>X</button></div>
             <form onSubmit={handleSubmit}>
               <div className="form-row">
                 <div className="form-group"><label>Amount (₹)</label><input type="number" className="form-control" value={form.amount} onChange={ev => setForm({...form, amount: ev.target.value})} required /></div>
                 <div className="form-group"><label>Category</label>
                   <select className="form-control" value={form.category} onChange={ev => setForm({...form, category: ev.target.value})} required>
                     <option value="">Select</option>
-                    {CATEGORIES.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
+                    {manualCategories.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
                   </select>
                 </div>
               </div>
               <div className="form-group"><label>Description</label><input type="text" className="form-control" placeholder="Optional" value={form.description} onChange={ev => setForm({...form, description: ev.target.value})} /></div>
               <div className="form-group"><label>Date</label><input type="date" className="form-control" value={form.date} onChange={ev => setForm({...form, date: ev.target.value})} /></div>
               <div className="modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
+                <button type="button" className="btn btn-secondary" onClick={closeExpenseModal}>Cancel</button>
                 <button type="submit" className={`btn btn-primary ${saving ? 'loading' : ''}`} disabled={saving}>
-                  {saving ? <><Spinner size={14}/> <span className="btn-text">Saving...</span></> : 'Add Expense'}
+                  {saving ? <><Spinner size={14}/> <span className="btn-text">Saving...</span></> : editingExpenseId ? 'Update Expense' : 'Add Expense'}
                 </button>
               </div>
             </form>

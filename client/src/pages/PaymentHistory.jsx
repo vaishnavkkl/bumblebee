@@ -15,6 +15,11 @@ export default function PaymentHistory() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
+  const [stats, setStats] = useState({
+    filtered: { amount: 0, count: 0 },
+    today: { amount: 0, count: 0 },
+    month: { amount: 0, count: 0 },
+  });
 
   const getISTDate = () => {
     const parts = new Intl.DateTimeFormat('en-CA', {
@@ -27,6 +32,10 @@ export default function PaymentHistory() {
     return `${values.year}-${values.month}-${values.day}`;
   };
   const [date, setDate] = useState(getISTDate());
+  const [month, setMonth] = useState(() => getISTDate().slice(0, 7));
+  const [filterMode, setFilterMode] = useState('date');
+
+  const formatMoney = (value) => `Rs. ${Number(value || 0).toLocaleString('en-IN')}`;
 
   const formatPaymentDate = (value) => {
     if (!value) return '-';
@@ -37,12 +46,18 @@ export default function PaymentHistory() {
   const load = async () => {
     setLoading(true);
     try {
-      const r = await api.get(`/billing/payments?date=${date}&page=${page}&limit=${limit}`);
+      const filterParam = filterMode === 'month' ? `month=${month}` : `date=${date}`;
+      const r = await api.get(`/billing/payments?${filterParam}&page=${page}&limit=${limit}`);
       setPayments(r.data.data);
       setTotal(r.data.total);
+      setStats(r.data.stats || {
+        filtered: { amount: 0, count: 0 },
+        today: { amount: 0, count: 0 },
+        month: { amount: 0, count: 0 },
+      });
     } finally { setLoading(false); }
   };
-  useEffect(() => { load(); }, [date, page, limit]);
+  useEffect(() => { load(); }, [date, month, filterMode, page, limit]);
 
   const handleDelete = async (id) => {
     const ok = await danger('Delete this payment record? This cannot be undone.', {
@@ -59,7 +74,7 @@ export default function PaymentHistory() {
   const handleMarkPending = async (billId, vehicleNumber) => {
     const ok = await confirm(
       `Mark bill for "${vehicleNumber || 'this vehicle'}" as Pending? This will move it back to the Pending Payments list.`,
-      { title: 'Mark as Pending', confirmText: 'Mark Pending', variant: 'warning', icon: '⏳' }
+      { title: 'Mark as Pending', confirmText: 'Mark Pending', variant: 'warning', icon: '!' }
     );
     if (!ok) return;
     try {
@@ -78,8 +93,53 @@ export default function PaymentHistory() {
         <div><h2>Payment History</h2><p>View and manage payment records</p></div>
       </div>
 
+      <div className="stats-grid">
+        <div className="stat-card">
+          <div className="stat-icon green"><span>Rs</span></div>
+          <div className="stat-info">
+            <h4>{filterMode === 'month' ? 'Selected Month' : 'Selected Date'}</h4>
+            <div className="stat-value amount-green">{formatMoney(stats.filtered.amount)}</div>
+            <div className="stat-sub">{stats.filtered.count} payments</div>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon blue"><span>D</span></div>
+          <div className="stat-info">
+            <h4>Today</h4>
+            <div className="stat-value amount-green">{formatMoney(stats.today.amount)}</div>
+            <div className="stat-sub">{stats.today.count} payments</div>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon amber"><span>M</span></div>
+          <div className="stat-info">
+            <h4>This Month</h4>
+            <div className="stat-value amount-green">{formatMoney(stats.month.amount)}</div>
+            <div className="stat-sub">{stats.month.count} payments</div>
+          </div>
+        </div>
+      </div>
+
       <div className="filter-bar">
-        <input type="date" className="form-control" value={date} onChange={e => { setDate(e.target.value); setPage(1); }} />
+        <button
+          type="button"
+          className={`btn btn-sm ${filterMode === 'date' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => { setFilterMode('date'); setPage(1); }}
+        >
+          Date
+        </button>
+        <button
+          type="button"
+          className={`btn btn-sm ${filterMode === 'month' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => { setFilterMode('month'); setMonth(getISTDate().slice(0, 7)); setPage(1); }}
+        >
+          This Month
+        </button>
+        {filterMode === 'date' ? (
+          <input type="date" className="form-control" value={date} onChange={e => { setDate(e.target.value); setPage(1); }} />
+        ) : (
+          <input type="month" className="form-control" value={month} onChange={e => { setMonth(e.target.value); setPage(1); }} />
+        )}
         {loading && <div className="dot-loader"><span/><span/><span/></div>}
         {!loading && <span style={{ color: 'var(--text-tertiary)', fontSize: '0.82rem' }}>{total} records</span>}
       </div>
@@ -102,8 +162,8 @@ export default function PaymentHistory() {
                 : payments.map((p, i) => (
                     <tr key={p.id}>
                       <td>{(page - 1) * limit + i + 1}</td>
-                      <td>{p.vehicle_number || '—'}</td>
-                      <td><span className="amount amount-green">₹{Number(p.amount).toLocaleString()}</span></td>
+                      <td>{p.vehicle_number || '-'}</td>
+                      <td><span className="amount amount-green">{formatMoney(p.amount)}</span></td>
                       <td><span className={`badge ${p.payment_mode === 'cash' ? 'badge-green' : 'badge-blue'}`}>{p.payment_mode}</span></td>
                       <td><span className={`badge ${p.is_advance ? 'badge-amber' : 'badge-blue'}`}>{p.is_advance ? 'Advance' : 'Payment'}</span></td>
                       <td>{p.created_by_name}</td>

@@ -6,7 +6,7 @@ import {
   PieChart, Pie, Cell
 } from 'recharts';
 import { SkeletonRow, SkeletonCard, Spinner } from '../components/Loaders';
-import { HiOutlinePlus, HiOutlineTrash, HiOutlineExclamation, HiOutlineDatabase, HiOutlineCloudUpload, HiOutlineDownload } from 'react-icons/hi';
+import { HiOutlinePlus, HiOutlinePencil, HiOutlineTrash, HiOutlineExclamation, HiOutlineDatabase, HiOutlineCloudUpload, HiOutlineDownload } from 'react-icons/hi';
 import { buildExportFilename, exportRowsToExcel } from '../utils/exportExcel';
 import { useAlert } from '../context/AlertContext';
 
@@ -70,6 +70,7 @@ export default function Income() {
   const [isReseting, setIsReseting] = useState(false);
 
   const [showModal, setShowModal] = useState(false);
+  const [editingIncomeId, setEditingIncomeId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ amount: '', type: 'in_hand', source: 'wash', description: '', date: getISTDate() });
 
@@ -110,15 +111,46 @@ export default function Income() {
   const pending = income.filter((i) => i.type === 'pending').reduce((s, i) => s + Number(i.amount), 0);
   const totalIncome = inHand + inAccount;
 
-  const handleAddIncome = async (e) => {
+  const resetIncomeForm = () => {
+    setEditingIncomeId(null);
+    setForm({ amount: '', type: 'in_hand', source: 'wash', description: '', date: getISTDate() });
+  };
+
+  const openAddIncome = () => {
+    resetIncomeForm();
+    setShowModal(true);
+  };
+
+  const openEditIncome = (record) => {
+    setEditingIncomeId(record.real_id || record.id);
+    setForm({
+      amount: String(record.amount || ''),
+      type: record.type === 'account' ? 'account' : 'in_hand',
+      source: record.source || 'other',
+      description: record.description || '',
+      date: record.date ? String(record.date).slice(0, 10) : getISTDate(),
+    });
+    setShowModal(true);
+  };
+
+  const closeIncomeModal = () => {
+    setShowModal(false);
+    resetIncomeForm();
+  };
+
+  const handleSaveIncome = async (e) => {
     e.preventDefault();
     if (!form.amount || Number(form.amount) <= 0) return toast.error('Enter a valid amount');
     setSaving(true);
     try {
-      await api.post('/finance/income', form);
-      toast.success('Income added');
-      setShowModal(false);
-      setForm({ amount: '', type: 'in_hand', source: 'wash', description: '', date: getISTDate() });
+      if (editingIncomeId) {
+        await api.put(`/finance/income/${editingIncomeId}`, form);
+        toast.success('Income updated');
+      } else {
+        await api.post('/finance/income', form);
+        toast.success('Income added');
+      }
+      closeIncomeModal();
       fetchRecords();
     } catch (err) { toast.error(err?.response?.data?.message || 'Failed'); } finally { setSaving(false); }
   };
@@ -212,7 +244,7 @@ export default function Income() {
           <button className={`btn btn-sm ${activeTab === 'report' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setActiveTab('report')}>📊 Report</button>
           <button className={`btn btn-sm ${activeTab === 'maintenance' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setActiveTab('maintenance')}>⚙️ Maintenance</button>
           {activeTab === 'list' && <button className="btn btn-secondary btn-sm" onClick={handleExportIncome} disabled={loading}><HiOutlineDownload /> Export Excel</button>}
-          {activeTab === 'list' && <button className="btn btn-primary btn-sm" onClick={() => setShowModal(true)}><HiOutlinePlus /> Add Income</button>}
+          {activeTab === 'list' && <button className="btn btn-primary btn-sm" onClick={openAddIncome}><HiOutlinePlus /> Add Income</button>}
         </div>
       </div>
 
@@ -274,7 +306,14 @@ export default function Income() {
                     <td><span className={`badge ${inc.type === 'in_hand' ? 'badge-green' : inc.type === 'account' ? 'badge-blue' : 'badge-amber'}`}>{inc.type === 'in_hand' ? 'Cash' : inc.type === 'account' ? 'Account' : 'Pending'}</span></td>
                     <td style={{ textTransform: 'capitalize' }}>{(inc.source || '').replace(/_/g, ' ')} {inc.type === 'pending' ? <small style={{display:'block',color:'var(--text-tertiary)'}}>{inc.description}</small> : ''}</td>
                     <td>{new Date(inc.date).toLocaleDateString('en-IN')}</td>
-                    <td>{inc.type !== 'pending' && <button className="btn-icon" onClick={() => handleDeleteIncome(inc.real_id || inc.id)}><HiOutlineTrash size={16} /></button>}</td>
+                    <td>
+                      {inc.type !== 'pending' && (
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
+                          <button className="btn-icon" title="Edit income" onClick={() => openEditIncome(inc)}><HiOutlinePencil size={16} /></button>
+                          <button className="btn-icon" title="Delete income" onClick={() => handleDeleteIncome(inc.real_id || inc.id)}><HiOutlineTrash size={16} /></button>
+                        </div>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -366,12 +405,15 @@ export default function Income() {
         </div>
       )}
 
-      {/* Modal ... (same as before) */}
+      {/* Modal */}
       {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+        <div className="modal-overlay" onClick={closeIncomeModal}>
           <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header"><h3>Add Income</h3></div>
-            <form onSubmit={handleAddIncome}>
+            <div className="modal-header">
+              <h3>{editingIncomeId ? 'Edit Income' : 'Add Income'}</h3>
+              <button type="button" className="btn-icon" onClick={closeIncomeModal}>X</button>
+            </div>
+            <form onSubmit={handleSaveIncome}>
               <div className="form-row">
                 <div className="form-group"><label>Amount (₹)</label><input type="number" className="form-control" value={form.amount} onChange={e => setForm({...form, amount: e.target.value})} required /></div>
                 <div className="form-group">
@@ -390,7 +432,13 @@ export default function Income() {
                 </div>
                 <div className="form-group"><label>Date</label><input type="date" className="form-control" value={form.date} onChange={e => setForm({...form, date: e.target.value})} /></div>
               </div>
-              <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>Add Income</button>
+              <div className="form-group"><label>Description</label><input type="text" className="form-control" placeholder="Optional" value={form.description} onChange={e => setForm({...form, description: e.target.value})} /></div>
+              <div className="modal-actions">
+                <button type="button" className="btn btn-secondary" onClick={closeIncomeModal}>Cancel</button>
+                <button type="submit" className={`btn btn-primary ${saving ? 'loading' : ''}`} disabled={saving}>
+                  {saving ? 'Saving...' : editingIncomeId ? 'Update Income' : 'Add Income'}
+                </button>
+              </div>
             </form>
           </div>
         </div>

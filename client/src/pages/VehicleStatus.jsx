@@ -13,9 +13,23 @@ const statusLabels = { in_progress: 'In Progress', completed: 'Completed' };
 const nextStatus = { in_progress: 'completed' };
 const vtMiniIcon = { Bike: BikeIcon, Car: CarIcon, 'Heavy Vehicle': TruckIcon };
 
+const getPaymentLabel = (bill) => {
+  if (bill.payment_status === 'paid') return 'Paid';
+  if (Number(bill.paid_amount || 0) > 0 && Number(bill.balance_amount || 0) > 0) return 'Partial';
+  return 'Pending';
+};
+
+const getPaymentBadge = (bill) => {
+  const label = getPaymentLabel(bill);
+  if (label === 'Paid') return 'badge-green';
+  if (label === 'Partial') return 'badge-blue';
+  return 'badge-amber';
+};
+
 export default function VehicleStatus() {
-  const { confirm } = useAlert();
+  const { confirm, danger } = useAlert();
   const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const [bills, setBills] = useState([]);
   const [loading, setLoading] = useState(false);
   const [updatingId, setUpdatingId] = useState(null);
@@ -24,7 +38,12 @@ export default function VehicleStatus() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [completionBill, setCompletionBill] = useState(null);
-  const [completionPayment, setCompletionPayment] = useState({ payment_status: 'paid', payment_mode: 'cash', discount_amount: '' });
+  const [completionPayment, setCompletionPayment] = useState({ payment_status: 'paid', payment_mode: 'cash', discount_amount: '', paid_amount: '' });
+  const [editBill, setEditBill] = useState(null);
+  const [editForm, setEditForm] = useState({ vehicle_number: '', customer_mobile: '', discount_amount: '', service_id: '', extra_service_ids: [] });
+  const [editServices, setEditServices] = useState([]);
+  const [editExtras, setEditExtras] = useState([]);
+  const [loadingEditCatalog, setLoadingEditCatalog] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -51,12 +70,56 @@ export default function VehicleStatus() {
 
   const openCompletionModal = (bill) => {
     setCompletionBill(bill);
-    setCompletionPayment({ payment_status: 'paid', payment_mode: 'cash', discount_amount: bill.discount_amount > 0 ? String(bill.discount_amount) : '' });
+    setCompletionPayment({ payment_status: 'paid', payment_mode: 'cash', discount_amount: bill.discount_amount > 0 ? String(bill.discount_amount) : '', paid_amount: '' });
   };
 
   const closeCompletionModal = () => {
     setCompletionBill(null);
-    setCompletionPayment({ payment_status: 'paid', payment_mode: 'cash', discount_amount: '' });
+    setCompletionPayment({ payment_status: 'paid', payment_mode: 'cash', discount_amount: '', paid_amount: '' });
+  };
+
+  const openEditModal = async (bill) => {
+    const selectedExtraIds = (bill.extras || [])
+      .map(extra => Number(extra.extra_service_id || extra.id))
+      .filter(id => Number.isInteger(id) && id > 0);
+    setEditBill(bill);
+    setEditForm({
+      vehicle_number: bill.vehicle_number || '',
+      customer_mobile: bill.customer_mobile || '',
+      discount_amount: Number(bill.discount_amount || 0) > 0 ? String(bill.discount_amount) : '',
+      service_id: bill.service_id ? String(bill.service_id) : '',
+      extra_service_ids: selectedExtraIds,
+    });
+    setLoadingEditCatalog(true);
+    try {
+      const [serviceRes, extraRes] = await Promise.all([
+        api.get(`/vehicles/services?vehicleTypeId=${bill.vehicle_type_id}`),
+        api.get('/vehicles/extra-services'),
+      ]);
+      setEditServices(serviceRes.data);
+      setEditExtras(extraRes.data);
+    } catch (err) {
+      toast.error('Failed to load services for editing');
+    } finally {
+      setLoadingEditCatalog(false);
+    }
+  };
+
+  const closeEditModal = () => {
+    setEditBill(null);
+    setEditForm({ vehicle_number: '', customer_mobile: '', discount_amount: '', service_id: '', extra_service_ids: [] });
+    setEditServices([]);
+    setEditExtras([]);
+    setLoadingEditCatalog(false);
+  };
+
+  const toggleEditExtra = (id) => {
+    setEditForm(prev => ({
+      ...prev,
+      extra_service_ids: prev.extra_service_ids.includes(id)
+        ? prev.extra_service_ids.filter(extraId => extraId !== id)
+        : [...prev.extra_service_ids, id],
+    }));
   };
 
   const completeWash = async (e) => {
@@ -68,6 +131,14 @@ export default function VehicleStatus() {
       toast.error('Discount cannot be more than the service total');
       return;
     }
+    const paymentStatus = completionPayment.payment_status;
+    const partialPaidAmount = Number(completionPayment.paid_amount) || 0;
+    if (paymentStatus === 'partial' && (partialPaidAmount <= 0 || partialPaidAmount >= completionAmountDue)) {
+      toast.error('Partial paid amount must be more than 0 and less than the amount due');
+      return;
+    }
+    const paidAmount = paymentStatus === 'paid' ? completionAmountDue : paymentStatus === 'partial' ? partialPaidAmount : 0;
+    const balanceAmount = Math.max(completionAmountDue - paidAmount, 0);
     setUpdatingId(completionBill.id);
     try {
       const completedBill = {
@@ -75,16 +146,19 @@ export default function VehicleStatus() {
         subtotal: completionSubtotal,
         discount_amount: discount,
         total_amount: completionAmountDue,
-        payment_status: completionPayment.payment_status,
+        paid_amount: paidAmount,
+        balance_amount: balanceAmount,
+        payment_status: paymentStatus,
         payment_mode: completionPayment.payment_mode,
         wash_status: 'completed',
         wash_completed_at: new Date().toISOString(),
       };
       await api.put(`/billing/${completionBill.id}/status`, {
         status: 'completed',
-        payment_status: completionPayment.payment_status,
+        payment_status: paymentStatus,
         payment_mode: completionPayment.payment_mode,
         discount_amount: discount,
+        paid_amount: paidAmount,
       });
       toast.success('Wash completed');
       closeCompletionModal();
@@ -103,9 +177,79 @@ export default function VehicleStatus() {
     }
   };
 
+  const saveDetails = async (e) => {
+    e.preventDefault();
+    if (!editBill) return;
+    const discount = Number(editForm.discount_amount) || 0;
+    if (discount > editSubtotal) {
+      toast.error('Discount cannot be more than the service total');
+      return;
+    }
+    if (!editForm.service_id) {
+      toast.error('Select a service');
+      return;
+    }
+
+    setUpdatingId(editBill.id);
+    try {
+      await api.put(`/billing/${editBill.id}/details`, {
+        vehicle_number: editForm.vehicle_number.trim(),
+        customer_mobile: editForm.customer_mobile.trim(),
+        discount_amount: discount,
+        service_id: Number(editForm.service_id),
+        extra_service_ids: editForm.extra_service_ids,
+      });
+      toast.success('Details updated');
+      closeEditModal();
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update details');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const deleteBill = async (bill) => {
+    const ok = await danger(`Delete bill #${bill.id} for ${bill.vehicle_number || 'No plate'}? This will remove linked payment and income records.`, {
+      title: 'Delete Wash Record',
+      confirmText: 'Delete',
+    });
+    if (!ok) return;
+
+    setUpdatingId(bill.id);
+    try {
+      await api.delete(`/billing/${bill.id}`);
+      toast.success('Wash record deleted');
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to delete wash record');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const editService = editServices.find(service => String(service.id) === String(editForm.service_id));
+  const editServiceOptions = editBill && editForm.service_id && !editServices.some(service => String(service.id) === String(editForm.service_id))
+    ? [{ id: Number(editForm.service_id), name: editBill.service_name, price: editBill.service_price }, ...editServices]
+    : editServices;
+  const editServicePrice = editService ? Number(editService.price || 0) : Number(editBill?.service_price || 0);
+  const editExtrasTotal = editForm.extra_service_ids.reduce((sum, id) => {
+    const extra = editExtras.find(item => Number(item.id) === Number(id));
+    return sum + Number(extra?.price || 0);
+  }, 0);
+  const editSubtotal = editBill ? editServicePrice + editExtrasTotal : 0;
+  const editDiscount = Number(editForm.discount_amount) || 0;
+  const editTotal = Math.max(0, editSubtotal - editDiscount);
+
   const completionSubtotal = completionBill ? Number(completionBill.total_amount || 0) + Number(completionBill.discount_amount || 0) : 0;
   const completionDiscount = Number(completionPayment.discount_amount) || 0;
   const completionAmountDue = Math.max(0, completionSubtotal - completionDiscount);
+  const completionPaidAmount = completionPayment.payment_status === 'paid'
+    ? completionAmountDue
+    : completionPayment.payment_status === 'partial'
+      ? Number(completionPayment.paid_amount) || 0
+      : 0;
+  const completionBalanceAmount = Math.max(completionAmountDue - completionPaidAmount, 0);
 
   return (
     <div className="fade-in">
@@ -163,27 +307,57 @@ export default function VehicleStatus() {
                   <span className={`badge ${statusColors[b.wash_status]}`}>{statusLabels[b.wash_status]}</span>
                 </div>
                 <div className="wash-card-body">
-                  <p><strong>{b.vehicle_type}</strong> · {b.service_name}</p>
-                  <p>Amount: ₹{Number(b.total_amount).toLocaleString()}</p>
+                  <p><strong>{b.vehicle_type}</strong> - {b.service_name}</p>
+                  {b.workshop_name && <p>Workshop: {b.workshop_name}</p>}
+                  <p>Amount: Rs. {Number(b.total_amount).toLocaleString()}</p>
                   {b.wash_status === 'completed' && (
-                    <p>Payment: <span className={`badge ${b.payment_status === 'paid' ? 'badge-green' : 'badge-amber'}`}>{b.payment_status}</span></p>
+                    <>
+                      <p>Payment: <span className={`badge ${getPaymentBadge(b)}`}>{getPaymentLabel(b)}</span></p>
+                      {Number(b.paid_amount || 0) > 0 && <p>Paid: Rs. {Number(b.paid_amount).toLocaleString()}</p>}
+                      {Number(b.balance_amount || 0) > 0 && <p>Balance: <span className="amount amount-red">Rs. {Number(b.balance_amount).toLocaleString()}</span></p>}
+                    </>
                   )}
                   <p>By: {b.created_by_name}</p>
                   {user?.role === 'admin' && durationStr && <p style={{ color: 'var(--success)', fontWeight: 600, marginTop: 4 }}>Wash Time: {durationStr}</p>}
                   {b.extras?.length > 0 && <p style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>Extras: {b.extras.map(e => e.name).join(', ')}</p>}
                 </div>
-                {nextStatus[b.wash_status] && (
-                  <button
-                    className={`btn btn-primary btn-sm wash-status-btn ${updatingId === b.id ? 'loading' : ''}`}
-                    onClick={() => nextStatus[b.wash_status] === 'completed' ? openCompletionModal(b) : updateStatus(b.id, nextStatus[b.wash_status], statusLabels[nextStatus[b.wash_status]])}
-                    disabled={updatingId === b.id}
-                  >
-                    {updatingId === b.id
-                      ? <><Spinner size={12} /> Updating...</>
-                      : `Mark as ${statusLabels[nextStatus[b.wash_status]]}`
-                    }
-                  </button>
-                )}
+                <div className="wash-card-actions">
+                  {nextStatus[b.wash_status] && (
+                    <div className="wash-card-primary-action">
+                      <button
+                        className={`btn btn-primary btn-sm wash-status-btn ${updatingId === b.id ? 'loading' : ''}`}
+                        onClick={() => nextStatus[b.wash_status] === 'completed' ? openCompletionModal(b) : updateStatus(b.id, nextStatus[b.wash_status], statusLabels[nextStatus[b.wash_status]])}
+                        disabled={updatingId === b.id}
+                      >
+                        {updatingId === b.id
+                          ? <><Spinner size={12} /> Updating...</>
+                          : `Mark as ${statusLabels[nextStatus[b.wash_status]]}`
+                        }
+                      </button>
+                    </div>
+                  )}
+                  <div className="wash-card-secondary-actions">
+                    {isAdmin && b.wash_status === 'completed' && (
+                      <button
+                        className={`btn btn-secondary btn-sm ${updatingId === b.id ? 'loading' : ''}`}
+                        onClick={() => updateStatus(b.id, 'in_progress', 'In Progress')}
+                        disabled={updatingId === b.id}
+                      >
+                        Revert
+                      </button>
+                    )}
+                    {isAdmin && b.wash_status === 'in_progress' && (
+                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => openEditModal(b)} disabled={updatingId === b.id}>
+                        Edit
+                      </button>
+                    )}
+                    {isAdmin && (
+                      <button type="button" className="btn btn-danger btn-sm" onClick={() => deleteBill(b)} disabled={updatingId === b.id}>
+                        Delete
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
             );
           })}
@@ -196,14 +370,20 @@ export default function VehicleStatus() {
           <form className="modal" onSubmit={completeWash}>
             <div className="modal-header">
               <h3>Complete Wash</h3>
-              <button type="button" className="btn-icon" onClick={closeCompletionModal}>×</button>
+              <button type="button" className="btn-icon" onClick={closeCompletionModal}>x</button>
             </div>
             <div className="bill-summary" style={{ marginTop: 0, marginBottom: 20 }}>
               <div className="bill-summary-row"><span>Vehicle</span><span>{completionBill.vehicle_number || 'No plate'}</span></div>
               <div className="bill-summary-row"><span>Service</span><span>{completionBill.service_name}</span></div>
-              <div className="bill-summary-row"><span>Subtotal</span><span className="amount">₹{completionSubtotal.toLocaleString()}</span></div>
-              {completionDiscount > 0 && <div className="bill-summary-row"><span>Discount</span><span className="amount amount-red">-₹{completionDiscount.toLocaleString()}</span></div>}
-              <div className="bill-summary-row total"><span>Amount Due</span><span className="amount">₹{completionAmountDue.toLocaleString()}</span></div>
+              <div className="bill-summary-row"><span>Subtotal</span><span className="amount">Rs. {completionSubtotal.toLocaleString()}</span></div>
+              {completionDiscount > 0 && <div className="bill-summary-row"><span>Discount</span><span className="amount amount-red">-Rs. {completionDiscount.toLocaleString()}</span></div>}
+              <div className="bill-summary-row total"><span>Amount Due</span><span className="amount">Rs. {completionAmountDue.toLocaleString()}</span></div>
+              {completionPayment.payment_status === 'partial' && (
+                <>
+                  <div className="bill-summary-row"><span>Paid Now</span><span className="amount amount-green">Rs. {completionPaidAmount.toLocaleString()}</span></div>
+                  <div className="bill-summary-row"><span>Pending Balance</span><span className="amount amount-red">Rs. {completionBalanceAmount.toLocaleString()}</span></div>
+                </>
+              )}
             </div>
             <div className="form-group">
               <label>Discount</label>
@@ -225,10 +405,25 @@ export default function VehicleStatus() {
                 onChange={e => setCompletionPayment(prev => ({ ...prev, payment_status: e.target.value }))}
               >
                 <option value="paid">Paid</option>
+                <option value="partial">Partial</option>
                 <option value="pending">Pending</option>
               </select>
             </div>
-            {completionPayment.payment_status === 'paid' && (
+            {completionPayment.payment_status === 'partial' && (
+              <div className="form-group">
+                <label>Paid Amount</label>
+                <input
+                  type="number"
+                  min="1"
+                  max={Math.max(completionAmountDue - 1, 1)}
+                  className="form-control"
+                  placeholder="Amount received"
+                  value={completionPayment.paid_amount}
+                  onChange={e => setCompletionPayment(prev => ({ ...prev, paid_amount: e.target.value }))}
+                />
+              </div>
+            )}
+            {completionPayment.payment_status !== 'pending' && (
               <div className="form-group">
                 <label>Payment Mode</label>
                 <select
@@ -245,6 +440,97 @@ export default function VehicleStatus() {
               <button type="button" className="btn btn-secondary" onClick={closeCompletionModal}>Cancel</button>
               <button className={`btn btn-primary ${updatingId === completionBill.id ? 'loading' : ''}`} disabled={updatingId === completionBill.id}>
                 {updatingId === completionBill.id ? <><Spinner size={14} /> Updating...</> : 'Complete Wash'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {editBill && (
+        <div className="modal-overlay">
+          <form className="modal" onSubmit={saveDetails}>
+            <div className="modal-header">
+              <h3>Edit Bill Details</h3>
+              <button type="button" className="btn-icon" onClick={closeEditModal}>x</button>
+            </div>
+            <div className="bill-summary" style={{ marginTop: 0, marginBottom: 20 }}>
+              <div className="bill-summary-row"><span>Bill</span><span>#{editBill.id}</span></div>
+              <div className="bill-summary-row"><span>Service</span><span>{editService?.name || editBill.service_name}</span></div>
+              <div className="bill-summary-row"><span>Subtotal</span><span className="amount">Rs. {editSubtotal.toLocaleString()}</span></div>
+              {editDiscount > 0 && <div className="bill-summary-row"><span>Discount</span><span className="amount amount-red">-Rs. {editDiscount.toLocaleString()}</span></div>}
+              <div className="bill-summary-row total"><span>New Total</span><span className="amount">Rs. {editTotal.toLocaleString()}</span></div>
+            </div>
+            <div className="form-group">
+              <label>Vehicle Number</label>
+              <input
+                type="text"
+                className="form-control"
+                value={editForm.vehicle_number}
+                onChange={e => setEditForm(prev => ({ ...prev, vehicle_number: e.target.value.toUpperCase() }))}
+              />
+            </div>
+            <div className="form-group">
+              <label>Customer Mobile</label>
+              <input
+                type="text"
+                className="form-control"
+                value={editForm.customer_mobile}
+                onChange={e => setEditForm(prev => ({ ...prev, customer_mobile: e.target.value }))}
+              />
+            </div>
+            <div className="form-group">
+              <label>Service</label>
+              <select
+                className="form-control"
+                value={editForm.service_id}
+                onChange={e => setEditForm(prev => ({ ...prev, service_id: e.target.value }))}
+                disabled={loadingEditCatalog}
+                required
+              >
+                <option value="">Select service</option>
+                {editServiceOptions.map(service => (
+                  <option key={service.id} value={service.id}>
+                    {service.name} - Rs. {Number(service.price || 0).toLocaleString()}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Extra Services</label>
+              {loadingEditCatalog ? (
+                <div className="skeleton" style={{ height: 42, borderRadius: 8 }} />
+              ) : editExtras.length === 0 ? (
+                <p style={{ color: 'var(--text-tertiary)', fontSize: '0.82rem' }}>No extra services available</p>
+              ) : (
+                <div className="extras-grid">
+                  {editExtras.map(extra => (
+                    <div
+                      key={extra.id}
+                      className={`extra-item ${editForm.extra_service_ids.includes(Number(extra.id)) ? 'selected' : ''}`}
+                      onClick={() => toggleEditExtra(Number(extra.id))}
+                    >
+                      <input type="checkbox" checked={editForm.extra_service_ids.includes(Number(extra.id))} readOnly />
+                      <span className="extra-label">{extra.name}</span>
+                      <span className="extra-price">Rs. {Number(extra.price || 0).toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="form-group">
+              <label>Discount</label>
+              <input
+                type="number"
+                min="0"
+                className="form-control"
+                value={editForm.discount_amount}
+                onChange={e => setEditForm(prev => ({ ...prev, discount_amount: e.target.value }))}
+              />
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="btn btn-secondary" onClick={closeEditModal}>Cancel</button>
+              <button className={`btn btn-primary ${updatingId === editBill.id ? 'loading' : ''}`} disabled={updatingId === editBill.id}>
+                {updatingId === editBill.id ? <><Spinner size={14} /> Saving...</> : 'Save Details'}
               </button>
             </div>
           </form>

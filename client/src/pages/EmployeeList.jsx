@@ -6,6 +6,16 @@ import toast, { Toaster } from 'react-hot-toast';
 import { HiOutlinePlus, HiOutlineTrash, HiOutlineUserGroup, HiOutlineLogin, HiOutlineLogout } from 'react-icons/hi';
 import { SkeletonRow, SkeletonCard, Spinner } from '../components/Loaders';
 
+const formatDuration = (hoursValue) => {
+  const totalMinutes = Math.round(Number(hoursValue || 0) * 60);
+  if (totalMinutes <= 0) return '0 min';
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (!hours) return `${minutes} min`;
+  if (!minutes) return `${hours} hr`;
+  return `${hours} hr ${minutes} min`;
+};
+
 export default function EmployeeList() {
   const { danger } = useAlert();
   const { user } = useAuth();
@@ -58,7 +68,7 @@ export default function EmployeeList() {
     setActionId(emp.id);
     try {
       const r = await api.post('/employees/check-out', { user_id: emp.id });
-      toast.success(`${emp.name} checked out · ${r.data.hours}h worked`);
+      toast.success(`${emp.name} checked out - ${formatDuration(r.data.hours)} worked`);
       load();
     } catch (err) { toast.error(err.response?.data?.message || 'Failed'); }
     finally { setActionId(null); }
@@ -71,7 +81,7 @@ export default function EmployeeList() {
     <div className="fade-in">
       <Toaster position="top-center" />
       <div className="page-header">
-        <div><h2>Employee Management</h2><p>{loading ? '…' : `${activeCount} active · ${clockedIn} clocked in`}</p></div>
+        <div><h2>Employee Management</h2><p>{loading ? 'Loading' : `${activeCount} active - ${clockedIn} clocked in`}</p></div>
         <button className="btn btn-primary" onClick={() => setShowModal(true)}><HiOutlinePlus /> Add Employee</button>
       </div>
 
@@ -107,18 +117,18 @@ export default function EmployeeList() {
                       <td><strong>{emp.name}</strong></td>
                       <td>{emp.phone}</td>
                       <td><span className={`badge ${emp.role === 'admin' ? 'badge-amber' : 'badge-blue'}`}>{emp.role}</span></td>
-                      <td>₹{Number(emp.salary).toLocaleString()}</td>
+                      <td>Rs. {Number(emp.salary).toLocaleString()}</td>
                       <td><span className={`badge ${emp.is_active ? 'badge-green' : 'badge-red'}`}>{emp.is_active ? 'Active' : 'Inactive'}</span></td>
                       <td>
-                        {emp.is_active
+                        {emp.is_active && emp.role !== 'admin'
                           ? isClockedIn
-                            ? <span style={{ fontSize: '0.8rem', color: 'var(--success)' }}>🟢 In since {clockInTime}</span>
-                            : <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>⚪ Not clocked in</span>
-                          : '—'
+                            ? <span style={{ fontSize: '0.8rem', color: 'var(--success)' }}>In since {clockInTime}</span>
+                            : <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>Not clocked in</span>
+                          : '-'
                         }
                       </td>
                       <td style={{ display: 'flex', gap: 6 }}>
-                        {emp.is_active && (
+                        {emp.is_active && emp.role !== 'admin' && (
                           isClockedIn ? (
                             <button
                               className={`btn btn-secondary btn-sm ${actionId === emp.id ? 'loading' : ''}`}
@@ -156,7 +166,7 @@ export default function EmployeeList() {
       {showModal && (
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header"><h3>Add Employee</h3><button className="btn-icon" onClick={() => setShowModal(false)}>✕</button></div>
+            <div className="modal-header"><h3>Add Employee</h3><button className="btn-icon" onClick={() => setShowModal(false)}>x</button></div>
             <form onSubmit={handleAdd}>
               <div className="form-group"><label>Full Name</label><input type="text" className="form-control" value={form.name} onChange={e => setForm({...form, name: e.target.value})} required /></div>
               <div className="form-row">

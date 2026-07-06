@@ -15,6 +15,7 @@ import {
 
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'];
 const STATUS_COLORS = { Active: '#10b981', 'At Risk': '#f59e0b', Lost: '#ef4444' };
+const formatMoney = (value) => `Rs. ${Number(value || 0).toLocaleString('en-IN')}`;
 
 function KPICard({ icon, label, value, sub, color }) {
   return (
@@ -45,6 +46,9 @@ export default function CustomerAnalytics() {
   const [topCustomers, setTopCustomers] = useState([]);
   const [frequency, setFrequency] = useState([]);
   const [services, setServices] = useState([]);
+  const [workshopKpis, setWorkshopKpis] = useState(null);
+  const [workshops, setWorkshops] = useState([]);
+  const [workshopTotal, setWorkshopTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [tableLoading, setTableLoading] = useState(false);
   const [search, setSearch] = useState('');
@@ -62,12 +66,19 @@ export default function CustomerAnalytics() {
       api.get('/analytics/customers/top'),
       api.get('/analytics/customers/frequency'),
       api.get('/analytics/customers/services'),
-    ]).then(([k, t, top, f, s]) => {
+      api.get('/analytics/customers/workshops/kpis'),
+      api.get('/analytics/customers/workshops?limit=10'),
+    ]).then(([k, t, top, f, s, wk, wl]) => {
       if (k.status === 'fulfilled') setKpis(k.value.data);
       if (t.status === 'fulfilled') setTrend(t.value.data);
       if (top.status === 'fulfilled') setTopCustomers(top.value.data);
       if (f.status === 'fulfilled') setFrequency(f.value.data);
       if (s.status === 'fulfilled') setServices(s.value.data);
+      if (wk.status === 'fulfilled') setWorkshopKpis(wk.value.data);
+      if (wl.status === 'fulfilled') {
+        setWorkshops(wl.value.data.data || []);
+        setWorkshopTotal(wl.value.data.total || 0);
+      }
     }).finally(() => setLoading(false));
   };
 
@@ -142,6 +153,57 @@ export default function CustomerAnalytics() {
       </div>
 
       {/* ── CHARTS ROW ────────────────────────────────────── */}
+      <SectionHeader title="Workshop Bulk Wash Analytics" sub="Workshop-origin bills, revenue, and recent activity" />
+      <div className="stats-grid">
+        <KPICard icon={<HiOutlineChartBar />} label="Tracked Workshops" color="blue"
+          value={loading ? '...' : Number(workshopKpis?.total_workshops || 0).toLocaleString()}
+          sub={`${workshopTotal} workshop records`} />
+        <KPICard icon={<HiOutlineRefresh />} label="Repeat Workshops" color="green"
+          value={loading ? '...' : Number(workshopKpis?.repeat_workshops || 0).toLocaleString()}
+          sub="More than one bill" />
+        <KPICard icon={<HiOutlineCurrencyRupee />} label="Workshop Revenue" color="amber"
+          value={loading ? '...' : formatMoney(workshopKpis?.total_revenue)}
+          sub="From workshop bills" />
+        <KPICard icon={<HiOutlineFire />} label="Active Workshops" color="green"
+          value={loading ? '...' : Number(workshopKpis?.active_workshops || 0).toLocaleString()}
+          sub="Billed in last 30 days" />
+      </div>
+
+      <div className="table-container" style={{ marginTop: 16 }}>
+        <table>
+          <thead><tr><th>Workshop</th><th>Contact</th><th>Bills</th><th>Vehicles</th><th>Total Spent</th><th>Avg. Spend</th><th>Last Visit</th><th>Status</th></tr></thead>
+          <tbody>
+            {loading ? Array.from({ length: 4 }).map((_, i) => <SkeletonRow key={i} cols={8} />) :
+              workshops.length === 0 ? (
+                <tr><td colSpan="8" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-tertiary)' }}>No workshop bills yet.</td></tr>
+              ) : workshops.map((w, i) => {
+                const { label, days } = getStatus(w.last_visit);
+                const badgeColor = label === 'Active' ? 'badge-green' : label === 'At Risk' ? 'badge-amber' : 'badge-red';
+                return (
+                  <tr key={w.workshop_id || i}>
+                    <td>
+                      <strong>{w.workshop_name}</strong>
+                      {w.services_used && <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>{w.services_used}</span>}
+                    </td>
+                    <td>{w.contact_person || w.phone || '-'}</td>
+                    <td>{w.bill_count}</td>
+                    <td>{w.vehicle_count}</td>
+                    <td>{formatMoney(w.total_spent)}</td>
+                    <td>{formatMoney(w.avg_spend)}</td>
+                    <td>
+                      {new Date(w.last_visit).toLocaleDateString()}
+                      <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
+                        {days === 0 ? 'Today' : `${days}d ago`}
+                      </span>
+                    </td>
+                    <td><span className={`badge ${badgeColor}`}>{label}</span></td>
+                  </tr>
+                );
+              })}
+          </tbody>
+        </table>
+      </div>
+
       <SectionHeader title="Trends & Segmentation" sub="Monthly visit volume and customer health breakdown" />
       <div className="grid-2">
         <div className="chart-container">
@@ -317,4 +379,3 @@ export default function CustomerAnalytics() {
     </div>
   );
 }
-

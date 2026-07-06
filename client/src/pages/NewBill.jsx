@@ -2,15 +2,18 @@ import { useState, useEffect, useRef } from 'react';
 import api from '../utils/api';
 import toast, { Toaster } from 'react-hot-toast';
 import { useAlert } from '../context/AlertContext';
+import { useAuth } from '../context/AuthContext';
 import { HiOutlineCheck } from 'react-icons/hi';
 import { BikeIcon, CarIcon, TruckIcon } from '../components/VehicleIcons';
 import { Spinner } from '../components/Loaders';
 
 export default function NewBill() {
   const { alert: showAlert, success } = useAlert();
+  const { user } = useAuth();
   const [vehicleTypes, setVehicleTypes] = useState([]);
   const [services, setServices] = useState([]);
   const [extras, setExtras] = useState([]);
+  const [workshops, setWorkshops] = useState([]);
   const [users, setUsers] = useState([]);
   const [loadingTypes, setLoadingTypes] = useState(true);
   const [loadingServices, setLoadingServices] = useState(false);
@@ -21,6 +24,7 @@ export default function NewBill() {
   const [selectedExtras, setSelectedExtras] = useState([]);
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [customerMobile, setCustomerMobile] = useState('');
+  const [selectedWorkshop, setSelectedWorkshop] = useState('');
   const [createdBy, setCreatedBy] = useState('');
   const serviceSectionRef = useRef(null);
   const extrasSectionRef = useRef(null);
@@ -40,12 +44,20 @@ export default function NewBill() {
       api.get('/vehicles/types'),
       api.get('/vehicles/extra-services'),
       api.get('/employees'),
-    ]).then(([types, exSvcs, emps]) => {
+      api.get('/workshops'),
+    ]).then(([types, exSvcs, emps, workshopRes]) => {
       setVehicleTypes(types.data);
       setExtras(exSvcs.data);
-      setUsers(emps.data.filter(u => u.is_active));
+      setWorkshops(workshopRes.data);
+      const activeUsers = emps.data.filter(u => u.is_active);
+      const hasCurrentUser = activeUsers.some(u => Number(u.id) === Number(user?.id));
+      setUsers(hasCurrentUser || !user ? activeUsers : [{ ...user, is_active: 1 }, ...activeUsers]);
     }).finally(() => setLoadingTypes(false));
-  }, []);
+  }, [user]);
+
+  useEffect(() => {
+    if (user?.id) setCreatedBy(String(user.id));
+  }, [user]);
 
   useEffect(() => {
     if (selectedVT) {
@@ -113,6 +125,7 @@ export default function NewBill() {
       const response = await api.post('/billing', {
         vehicle_type_id: selectedVT, vehicle_number: vehicleNumber,
         customer_mobile: customerMobile,
+        workshop_id: selectedWorkshop || null,
         service_id: selectedService, extra_service_ids: selectedExtras,
         created_by: createdBy,
       });
@@ -123,7 +136,7 @@ export default function NewBill() {
       );
 
       setSelectedVT(null); setSelectedService(null); setSelectedExtras([]);
-      setVehicleNumber(''); setCustomerMobile(''); setCreatedBy('');
+      setVehicleNumber(''); setCustomerMobile(''); setSelectedWorkshop(''); setCreatedBy(user?.id ? String(user.id) : '');
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to create bill');
     } finally { setSubmitting(false); }
@@ -287,6 +300,15 @@ export default function NewBill() {
               <label>Customer Mobile (Optional)</label>
               <input type="text" className="form-control" placeholder="98XXXXXXXX" value={customerMobile} onChange={e => setCustomerMobile(e.target.value)} />
             </div>
+          </div>
+          <div className="form-group">
+            <label>Workshop</label>
+            <select className="form-control" value={selectedWorkshop} onChange={e => setSelectedWorkshop(e.target.value)}>
+              <option value="">Direct customer / no workshop</option>
+              {workshops.map(workshop => (
+                <option key={workshop.id} value={workshop.id}>{workshop.name}</option>
+              ))}
+            </select>
           </div>
           <div className="form-group">
             <label>Bill Created By</label>

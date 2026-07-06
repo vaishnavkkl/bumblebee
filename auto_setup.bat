@@ -1,5 +1,5 @@
 @echo off
-setlocal enabledelayedexpansion
+setlocal
 
 cd /d "%~dp0"
 
@@ -10,10 +10,17 @@ echo.
 
 :: 1. Check for Node.js
 node -v >nul 2>&1
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo [ERROR] Node.js is not installed. Please install it from https://nodejs.org/
     pause
-    exit /b
+    exit /b 1
+)
+
+call npm -v >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] npm is not available. Reinstall Node.js and make sure npm is included.
+    pause
+    exit /b 1
 )
 
 echo Checking MySQL service...
@@ -26,24 +33,27 @@ if errorlevel 1 (
 echo.
 
 :: 2. Configure Database
-echo [STEP 1/6] Database Configuration
+echo [STEP 1/7] Database Configuration
 set /p DB_PASS="Enter your MySQL root password: "
 echo.
 
 :: Create .env file for the server
-echo DB_HOST=127.0.0.1 > server\.env
-echo DB_USER=root >> server\.env
-echo DB_PASSWORD=!DB_PASS! >> server\.env
-echo DB_NAME=bumblebee_db >> server\.env
-echo JWT_SECRET=bumblebee_secret_key_2026 >> server\.env
-echo PORT=5000 >> server\.env
+set "BB_DB_PASS=%DB_PASS%"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$content = @('DB_HOST=127.0.0.1','DB_PORT=3306','DB_USER=root','DB_PASSWORD=' + $env:BB_DB_PASS,'DB_NAME=bumblebee_db','JWT_SECRET=bumblebee_secret_key_2026','PORT=5000'); Set-Content -Path 'server\.env' -Value $content -Encoding ASCII"
+set "BB_DB_PASS="
+if errorlevel 1 (
+    echo [ERROR] Failed to write server\.env.
+    pause
+    exit /b 1
+)
 
-echo [STEP 2/6] Installing Backend Dependencies...
-cd server
+echo [STEP 2/7] Installing Backend Dependencies...
+pushd server
 call npm install
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo.
     echo [ERROR] Backend dependency installation failed.
+    popd
     pause
     exit /b 1
 ) else (
@@ -51,63 +61,92 @@ if %errorlevel% neq 0 (
 )
 
 echo.
-echo [STEP 3/6] Creating and Updating Database...
+echo [STEP 3/7] Syncing Database Schema and Catalog...
 node setup.js
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo.
     echo [ERROR] Database setup failed. Make sure:
     echo 1. MySQL is running.
     echo 2. The password you entered is correct.
     echo 3. server\.env has the correct database settings.
-    cd ..
+    popd
     pause
     exit /b 1
 ) else (
-    echo [SUCCESS] Database setup completed.
+    echo [SUCCESS] Database schema and catalog are up to date.
+    echo [INFO] Synced workshops, customer mobiles, bill extras, discounts, payment status, expense categories, and salary advances.
+    if not exist "..\.tmp" mkdir "..\.tmp" >nul 2>&1
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "$files = @('schema.sql','setup.js'); Get-FileHash $files -Algorithm SHA256 | ForEach-Object { '{0}|{1}' -f $_.Path,$_.Hash } | Set-Content -Path '..\.tmp\server_schema_hash' -Encoding ASCII" >nul 2>&1
 )
 
 echo.
 echo.
-echo [STEP 4/6] Updating Default Users...
+echo [STEP 4/7] Updating Default Login Users...
 node migrate_users.js
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo.
     echo [ERROR] Failed to create or update default users.
     echo Check server\.env database settings and make sure MySQL is running.
+    popd
     pause
     exit /b 1
 )
-cd ..
+popd
 
 echo.
-echo [STEP 5/6] Installing and Building Frontend...
-cd client
+echo [STEP 5/7] Installing and Building Web Frontend...
+pushd client
 call npm install
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo.
     echo [ERROR] Frontend dependency installation failed.
+    popd
     pause
     exit /b 1
 )
 echo Building optimized production files...
 call npm run build
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo.
     echo [ERROR] Frontend build failed.
+    popd
     pause
     exit /b 1
 )
-cd ..
+popd
+
+echo.
+echo [STEP 6/7] Installing Mobile App Dependencies...
+if exist "bumblebee\package.json" (
+    pushd bumblebee
+    call npm install
+    if errorlevel 1 (
+        echo.
+        echo [ERROR] Mobile app dependency installation failed.
+        popd
+        pause
+        exit /b 1
+    )
+    popd
+    echo [SUCCESS] Mobile app dependencies installed.
+) else (
+    echo [SKIPPED] Mobile app folder was not found.
+)
 
 :: 4. Launch the application
 echo.
-echo [STEP 6/6] Launching Application...
+echo [STEP 7/7] Launching Application...
+set "START_MOBILE=N"
+if exist "bumblebee\package.json" (
+    set /p START_MOBILE="Start Expo mobile app too? (Y/N): "
+)
 echo.
 echo ***************************************************
 echo   SETUP COMPLETE! 
-echo   The app is now starting in two windows.
+echo   The app is now starting.
 echo   - Backend: http://localhost:5000
 echo   - Frontend: http://localhost:3000
+if /I "%START_MOBILE%"=="Y" echo   - Mobile: Expo dev server window
 echo.
 echo   Login details:
 echo   - Admin: admin@gmail.com / admin123
@@ -118,10 +157,14 @@ echo ***************************************************
 echo.
 
 :: Start Backend
-start "Bumblebee Backend" cmd /k "cd server && npm start"
+start "Bumblebee Backend" /D "%~dp0server" cmd /k npm start
 
 :: Start Frontend (Production Preview)
-start "Bumblebee Frontend" cmd /k "cd client && npm run preview -- --host --port 3000"
+start "Bumblebee Frontend" /D "%~dp0client" cmd /k npm run preview -- --host --port 3000
+
+if /I "%START_MOBILE%"=="Y" (
+    start "Bumblebee Mobile" /D "%~dp0bumblebee" cmd /k npm start
+)
 
 echo.
 echo You can now close this setup window.

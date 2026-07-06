@@ -5,13 +5,31 @@ cd /d "%~dp0"
 
 echo.
 echo Bumblebee database clear tool
-echo This clears bills, payments, income, expenses, attendance, and salary data.
-echo It keeps users, vehicle types, services, and extra services.
+echo This clears transactional data from the current schema:
+echo - bills, bill extra selections, payments, income, expenses
+echo - attendance, salary payments, and salary advances
+echo.
+echo It keeps users, vehicle types, services, extra services,
+echo workshops, and expense categories.
+echo.
+echo Create a backup first if you need to keep historical data.
 echo.
 set /p CONFIRM=Type CLEAR to continue: 
 
 if /I not "%CONFIRM%"=="CLEAR" (
   echo Cancelled. No database changes were made.
+  pause
+  exit /b 1
+)
+
+if not exist "server\.env" (
+  echo server\.env not found. Run auto_setup.bat first.
+  pause
+  exit /b 1
+)
+
+if not exist "server\node_modules" (
+  echo Backend dependencies are missing. Run auto_setup.bat first.
   pause
   exit /b 1
 )

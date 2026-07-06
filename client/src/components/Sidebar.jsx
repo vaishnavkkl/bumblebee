@@ -99,6 +99,9 @@ export default function Sidebar() {
             <NavLink to="/admin/services" className={isActive('/admin/services')}>
               <span className="nav-icon"><MaintenanceIcon /></span> Services
             </NavLink>
+            <NavLink to="/admin/workshops" className={isActive('/admin/workshops')}>
+              <span className="nav-icon"><CustomerIcon /></span> Workshops
+            </NavLink>
             <NavLink to="/admin/security" className={isActive('/admin/security')}>
               <span className="nav-icon"><SecurityIcon /></span> Security & Data
             </NavLink>

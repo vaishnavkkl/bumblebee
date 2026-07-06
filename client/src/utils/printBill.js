@@ -1,5 +1,12 @@
 const formatAmount = (value) => Number(value || 0).toLocaleString('en-IN');
 
+const paymentLabel = (bill) => {
+  if (bill.payment_status === 'paid') return 'Paid';
+  if (bill.payment_status === 'partial') return 'Partial';
+  if (Number(bill.paid_amount || 0) > 0 && Number(bill.balance_amount || 0) > 0) return 'Partial';
+  return 'Pending';
+};
+
 export function printBill(bill) {
   const printWindow = window.open('', '_blank', 'width=800,height=600');
   if (!printWindow) return;
@@ -47,7 +54,9 @@ export function printBill(bill) {
           <div class="row"><span>Subtotal:</span> <span>Rs. ${formatAmount(bill.subtotal)}</span></div>
           ${Number(bill.discount_amount || 0) > 0 ? `<div class="row"><span>Discount:</span> <span>-Rs. ${formatAmount(bill.discount_amount)}</span></div>` : ''}
           <div class="row"><span>Total:</span> <span>Rs. ${formatAmount(bill.total_amount)}</span></div>
-          <div class="row"><span>Status:</span> <span>${bill.payment_status === 'paid' ? 'Paid' : 'Pending'}</span></div>
+          ${Number(bill.paid_amount || 0) > 0 ? `<div class="row"><span>Paid:</span> <span>Rs. ${formatAmount(bill.paid_amount)}</span></div>` : ''}
+          ${Number(bill.balance_amount || 0) > 0 ? `<div class="row"><span>Balance:</span> <span>Rs. ${formatAmount(bill.balance_amount)}</span></div>` : ''}
+          <div class="row"><span>Status:</span> <span>${paymentLabel(bill)}</span></div>
         </div>
         <div class="footer">
           <p>Thank you for visiting!</p>

@@ -1,5 +1,61 @@
 const pool = require('../db');
 
+const DEFAULT_EXPENSE_CATEGORIES = ['Water', 'Electricity', 'Supplies', 'Maintenance', 'Rent', 'Food', 'salary', 'Other'];
+
+async function ensureExpenseCategorySchema(conn = pool) {
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS expense_categories (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(100) NOT NULL,
+      is_active TINYINT(1) DEFAULT 1,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY unique_expense_category_name (name)
+    )
+  `);
+
+  for (const name of DEFAULT_EXPENSE_CATEGORIES) {
+    await conn.query(
+      'INSERT INTO expense_categories (name, is_active) VALUES (?, 1) ON DUPLICATE KEY UPDATE is_active = VALUES(is_active)',
+      [name]
+    );
+  }
+
+  await conn.query(`
+    INSERT IGNORE INTO expense_categories (name, is_active)
+    SELECT DISTINCT TRIM(category), 1
+    FROM expenses
+    WHERE category IS NOT NULL AND TRIM(category) <> ''
+  `);
+}
+
+exports.getExpenseCategories = async (req, res) => {
+  try {
+    await ensureExpenseCategorySchema();
+    const [records] = await pool.query(
+      'SELECT id, name, is_active FROM expense_categories WHERE is_active = 1 ORDER BY name ASC'
+    );
+    res.json(records);
+  } catch (err) { res.status(500).json({ message: err.message }); }
+};
+
+exports.addExpenseCategory = async (req, res) => {
+  try {
+    await ensureExpenseCategorySchema();
+    const name = String(req.body.name || '').trim();
+    if (!name) return res.status(400).json({ message: 'Category name is required' });
+    if (name.length > 100) return res.status(400).json({ message: 'Category name is too long' });
+    if (name.toLowerCase() === 'salary') {
+      return res.status(400).json({ message: 'Salary category is system managed' });
+    }
+    const [result] = await pool.query(
+      'INSERT INTO expense_categories (name, is_active) VALUES (?, 1) ON DUPLICATE KEY UPDATE is_active = 1, name = VALUES(name)',
+      [name]
+    );
+    res.status(201).json({ id: result.insertId, name });
+  } catch (err) { res.status(500).json({ message: err.message }); }
+};
+
 exports.addIncome = async (req, res) => {
   try {
     const { amount, type, source, description, date } = req.body;
@@ -127,12 +183,42 @@ exports.deleteIncome = async (req, res) => {
   } catch (err) { res.status(500).json({ message: err.message }); }
 };
 
+exports.updateIncome = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { amount, type, source, description, date } = req.body;
+    if (!amount || Number(amount) <= 0 || !type || !date) {
+      return res.status(400).json({ message: 'Valid amount, type and date are required' });
+    }
+    if (!['in_hand', 'account'].includes(type)) {
+      return res.status(400).json({ message: 'Invalid income type' });
+    }
+    const [result] = await pool.query(
+      'UPDATE income SET amount = ?, type = ?, source = ?, description = ?, date = ? WHERE id = ?',
+      [amount, type, source || 'other', description || null, date, id]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Income record not found' });
+    }
+    res.json({ message: 'Income updated successfully' });
+  } catch (err) { res.status(500).json({ message: err.message }); }
+};
+
 exports.addExpense = async (req, res) => {
   try {
+    await ensureExpenseCategorySchema();
     const { amount, category, description, date } = req.body;
+    const normalizedCategory = String(category || '').trim();
+    if (!amount || Number(amount) <= 0 || !normalizedCategory || !date) {
+      return res.status(400).json({ message: 'Valid amount, category and date are required' });
+    }
+    await pool.query(
+      'INSERT INTO expense_categories (name, is_active) VALUES (?, 1) ON DUPLICATE KEY UPDATE is_active = 1',
+      [normalizedCategory]
+    );
     const [result] = await pool.query(
       'INSERT INTO expenses (amount, category, description, date, created_by) VALUES (?, ?, ?, ?, ?)',
-      [amount, category, description, date, req.user.id]
+      [amount, normalizedCategory, description, date, req.user.id]
     );
     res.status(201).json({ id: result.insertId });
   } catch (err) { res.status(500).json({ message: err.message }); }
@@ -152,9 +238,47 @@ exports.getExpenses = async (req, res) => {
   } catch (err) { res.status(500).json({ message: err.message }); }
 };
 
+exports.updateExpense = async (req, res) => {
+  try {
+    await ensureExpenseCategorySchema();
+    const { id } = req.params;
+    const { amount, category, description, date } = req.body;
+    const normalizedCategory = String(category || '').trim();
+    if (!amount || Number(amount) <= 0 || !normalizedCategory || !date) {
+      return res.status(400).json({ message: 'Valid amount, category and date are required' });
+    }
+    const [linkedSalary] = await pool.query(
+      'SELECT id FROM salary_payments WHERE expense_id = ? LIMIT 1',
+      [id]
+    );
+    if (linkedSalary.length) {
+      return res.status(409).json({ message: 'Salary expenses must be edited from the Salary module' });
+    }
+    await pool.query(
+      'INSERT INTO expense_categories (name, is_active) VALUES (?, 1) ON DUPLICATE KEY UPDATE is_active = 1',
+      [normalizedCategory]
+    );
+    const [result] = await pool.query(
+      'UPDATE expenses SET amount = ?, category = ?, description = ?, date = ? WHERE id = ?',
+      [amount, normalizedCategory, description || null, date, id]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Expense record not found' });
+    }
+    res.json({ message: 'Expense updated successfully' });
+  } catch (err) { res.status(500).json({ message: err.message }); }
+};
+
 exports.deleteExpense = async (req, res) => {
   try {
     const { id } = req.params;
+    const [linkedSalary] = await pool.query(
+      'SELECT id FROM salary_payments WHERE expense_id = ? LIMIT 1',
+      [id]
+    );
+    if (linkedSalary.length) {
+      return res.status(409).json({ message: 'Salary expenses must be deleted from the Salary module' });
+    }
     const [result] = await pool.query('DELETE FROM expenses WHERE id = ?', [id]);
     if (result.affectedRows === 0) {
       return res.status(404).json({ message: 'Expense record not found' });
@@ -202,18 +326,8 @@ exports.getFinancialReport = async (req, res) => {
        GROUP BY COALESCE(category, 'other') ORDER BY total DESC`,
       [startDate, endDate]
     );
-    const [salaryRows] = await pool.query(
-      `SELECT COALESCE(SUM(amount), 0) as total
-       FROM salary_payments WHERE paid_date BETWEEN ? AND ?`,
-      [startDate, endDate]
-    );
-    const salaryTotal = Number(salaryRows[0]?.total || 0);
     const totalIncome = incomeData.reduce((sum, item) => sum + Number(item.total), 0);
-    let totalExpense = expenseData.reduce((sum, item) => sum + Number(item.total), 0);
-    if (salaryTotal > 0) {
-      totalExpense += salaryTotal;
-      expenseData.push({ category: 'Employee Salaries', total: salaryTotal });
-    }
+    const totalExpense = expenseData.reduce((sum, item) => sum + Number(item.total), 0);
     res.json({
       summary: { totalIncome, totalExpense, netBalance: totalIncome - totalExpense },
       incomeBySource: incomeData,

@@ -10,12 +10,15 @@ router.delete('/:id',         auth, adminOnly, ctrl.remove);
 router.put('/:id/salary',     auth, adminOnly, ctrl.updateSalary);
 
 // Manual attendance (admin can do anyone, employees can do themselves)
-router.post('/check-in',      auth,           ctrl.checkIn);
-router.post('/check-out',     auth,           ctrl.checkOut);
+router.post('/check-in',      auth, adminOnly, ctrl.checkIn);
+router.post('/check-out',     auth, adminOnly, ctrl.checkOut);
 
 router.get('/attendance',     auth,           ctrl.getAttendance);
 router.get('/working-hours',  auth, adminOnly, ctrl.getWorkingHours);
 router.post('/salary-pay',    auth, adminOnly, ctrl.paySalary);
+router.get('/salary-summary', auth, adminOnly, ctrl.getSalarySummary);
 router.get('/salary-history', auth, adminOnly, ctrl.getSalaryHistory);
+router.put('/salary-payments/:id', auth, adminOnly, ctrl.updateSalaryPayment);
+router.delete('/salary-payments/:id', auth, adminOnly, ctrl.deleteSalaryPayment);
 
 module.exports = router;

@@ -1,4 +1,5 @@
 const pool = require('../db');
+const { ensureWorkshopSchema } = require('./workshopController');
 
 exports.getCustomerAnalytics = async (req, res) => {
   try {
@@ -173,6 +174,90 @@ exports.getServicePopularity = async (req, res) => {
     res.json(results);
   } catch (err) {
     console.error('getServicePopularity error:', err.message);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.getWorkshopKPIs = async (req, res) => {
+  try {
+    await ensureWorkshopSchema();
+    const [rows] = await pool.query(`
+      SELECT
+        w.id,
+        w.name,
+        COUNT(b.id) AS bill_count,
+        SUM(b.total_amount) AS total_spent,
+        DATEDIFF(NOW(), MAX(b.created_at)) AS days_since_last_visit
+      FROM workshops w
+      JOIN bills b ON b.workshop_id = w.id
+      GROUP BY w.id, w.name
+    `);
+
+    const total_workshops = rows.length;
+    const repeat_workshops = rows.filter(row => Number(row.bill_count) > 1).length;
+    const total_revenue = rows.reduce((sum, row) => sum + Number(row.total_spent || 0), 0);
+    const active_workshops = rows.filter(row => Number(row.days_since_last_visit) <= 30).length;
+    const at_risk_workshops = rows.filter(row => Number(row.days_since_last_visit) > 30 && Number(row.days_since_last_visit) <= 90).length;
+    const lost_workshops = rows.filter(row => Number(row.days_since_last_visit) > 90).length;
+
+    res.json({ total_workshops, repeat_workshops, total_revenue, active_workshops, at_risk_workshops, lost_workshops });
+  } catch (err) {
+    console.error('getWorkshopKPIs error:', err.message);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.getWorkshopAnalytics = async (req, res) => {
+  try {
+    await ensureWorkshopSchema();
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = (page - 1) * limit;
+    const search = req.query.search || '';
+    const status = req.query.status || 'All';
+
+    const searchParams = search ? [`%${search}%`, `%${search}%`, `%${search}%`] : [];
+    const searchClause = search ? 'AND (w.name LIKE ? OR w.phone LIKE ? OR b.vehicle_number LIKE ?)' : '';
+
+    const baseQuery = `
+      SELECT
+        w.id AS workshop_id,
+        w.name AS workshop_name,
+        w.contact_person,
+        w.phone,
+        COUNT(b.id) AS bill_count,
+        COUNT(DISTINCT NULLIF(b.vehicle_number, '')) AS vehicle_count,
+        SUM(b.total_amount) AS total_spent,
+        AVG(b.total_amount) AS avg_spend,
+        MIN(b.created_at) AS first_visit,
+        MAX(b.created_at) AS last_visit,
+        DATEDIFF(NOW(), MAX(b.created_at)) AS days_since_last_visit,
+        GROUP_CONCAT(DISTINCT s.name SEPARATOR ', ') AS services_used
+      FROM workshops w
+      JOIN bills b ON b.workshop_id = w.id
+      JOIN services s ON b.service_id = s.id
+      WHERE 1=1 ${searchClause}
+      GROUP BY w.id, w.name, w.contact_person, w.phone
+    `;
+
+    let havingClause = '';
+    if (status === 'Active') havingClause = 'HAVING days_since_last_visit <= 30';
+    else if (status === 'At Risk') havingClause = 'HAVING days_since_last_visit > 30 AND days_since_last_visit <= 90';
+    else if (status === 'Lost') havingClause = 'HAVING days_since_last_visit > 90';
+
+    const [[{ total }]] = await pool.query(
+      `SELECT COUNT(*) AS total FROM (${baseQuery} ${havingClause}) AS sub`,
+      searchParams
+    );
+
+    const [results] = await pool.query(
+      `${baseQuery} ${havingClause} ORDER BY total_spent DESC, last_visit DESC LIMIT ? OFFSET ?`,
+      [...searchParams, limit, offset]
+    );
+
+    res.json({ data: results, total, page, limit });
+  } catch (err) {
+    console.error('getWorkshopAnalytics error:', err.message);
     res.status(500).json({ message: err.message });
   }
 };

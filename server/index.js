@@ -15,6 +15,7 @@ app.use('/api/billing', require('./routes/billing'));
 app.use('/api/finance', require('./routes/finance'));
 app.use('/api/dashboard', require('./routes/dashboard'));
 app.use('/api/analytics', require('./routes/analytics'));
+app.use('/api/workshops', require('./routes/workshops'));
 app.use('/api/system', require('./routes/system'));
 // Health check
 app.get('/api/health', async (req, res) => {

@@ -5,7 +5,7 @@ const api = axios.create({ baseURL: '/api' });
 api.interceptors.response.use(
   res => res,
   err => {
-    if (err.response?.status === 401) {
+    if (err.response?.status === 401 && !err.config?.url?.includes('/auth/login')) {
       localStorage.removeItem('bb-token');
       window.location.href = '/login';
     }
