@@ -34,7 +34,24 @@ echo.
 
 :: 2. Configure Database
 echo [STEP 1/7] Database Configuration
-set /p DB_PASS="Enter your MySQL root password: "
+set "SAVED_DB_PASS="
+if exist "server\.env" (
+    for /f "usebackq tokens=1,* delims==" %%A in ("server\.env") do (
+        if /I "%%A"=="DB_PASSWORD" set "SAVED_DB_PASS=%%B"
+    )
+)
+
+if defined BB_DB_PASS (
+    set "DB_PASS=%BB_DB_PASS%"
+    echo Using MySQL root password from BB_DB_PASS.
+) else (
+    if defined SAVED_DB_PASS (
+        set /p DB_PASS="Enter your MySQL root password [press Enter to keep saved]: "
+        if not defined DB_PASS set "DB_PASS=%SAVED_DB_PASS%"
+    ) else (
+        set /p DB_PASS="Enter your MySQL root password: "
+    )
+)
 echo.
 
 :: Create .env file for the server
