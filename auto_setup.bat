@@ -34,39 +34,13 @@ echo.
 
 :: 2. Configure Database
 echo [STEP 1/7] Database Configuration
-set "SAVED_DB_PASS="
-set "HAS_SAVED_DB_PASS="
-if exist "server\.env" (
-    for /f "usebackq tokens=1,* delims==" %%A in ("server\.env") do (
-        if /I "%%A"=="DB_PASSWORD" (
-            set "SAVED_DB_PASS=%%B"
-            set "HAS_SAVED_DB_PASS=Y"
-        )
-    )
-)
-
-if defined BB_DB_PASS (
-    set "DB_PASS=%BB_DB_PASS%"
-    echo Using MySQL root password from BB_DB_PASS.
-) else (
-    if defined HAS_SAVED_DB_PASS (
-        set /p DB_PASS="Enter your MySQL root password [press Enter to keep saved]: "
-        if not defined DB_PASS set "DB_PASS=%SAVED_DB_PASS%"
-    ) else (
-        set /p DB_PASS="Enter your MySQL root password: "
-    )
-)
-echo.
-
-:: Create .env file for the server
-set "BB_DB_PASS=%DB_PASS%"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$content = @('DB_HOST=127.0.0.1','DB_PORT=3306','DB_USER=root','DB_PASSWORD=' + $env:BB_DB_PASS,'DB_NAME=bumblebee_db','JWT_SECRET=bumblebee_secret_key_2026','PORT=5000'); Set-Content -Path 'server\.env' -Value $content -Encoding ASCII"
-set "BB_DB_PASS="
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$envPath = 'server\.env'; $saved = ''; $hasSaved = $false; if (Test-Path $envPath) { $lines = @(Get-Content -Path $envPath -ErrorAction Stop); for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i] -match '^DB_PASSWORD=(.*)$') { $saved = [string]$Matches[1]; $hasSaved = $true; if ($saved -eq '' -and ($i + 1) -lt $lines.Count -and $lines[$i + 1] -notmatch '^\s*$' -and $lines[$i + 1] -notmatch '=') { $saved = [string]$lines[$i + 1] }; break } } }; if ($env:BB_DB_PASS) { $dbPass = [string]$env:BB_DB_PASS; Write-Host 'Using MySQL root password from BB_DB_PASS.' } elseif ($hasSaved) { $dbPass = Read-Host 'Enter your MySQL root password [press Enter to keep saved]'; if ($dbPass -eq '') { $dbPass = $saved } } else { $dbPass = Read-Host 'Enter your MySQL root password' }; $dbPass = ([string]$dbPass) -replace '[\r\n]', ''; $content = @('DB_HOST=127.0.0.1','DB_PORT=3306','DB_USER=root',('DB_PASSWORD=' + $dbPass),'DB_NAME=bumblebee_db','JWT_SECRET=bumblebee_secret_key_2026','PORT=5000'); Set-Content -Path $envPath -Value $content -Encoding ASCII"
 if errorlevel 1 (
     echo [ERROR] Failed to write server\.env.
     pause
     exit /b 1
 )
+echo.
 
 echo [STEP 2/7] Installing Backend Dependencies...
 pushd server
