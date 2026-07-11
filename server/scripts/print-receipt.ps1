@@ -54,13 +54,21 @@ $doc.DefaultPageSettings.PaperSize = $paperSize
 $doc.add_PrintPage({
   param($sender, $eventArgs)
 
+  # MarginBounds.Top includes the thermal driver's non-printable leading
+  # offset even when our configured top margin is zero. Pull the complete
+  # receipt header upward to remove that additional white band.
+  [single]$contentTop = 6 + [Math]::Max(
+    $eventArgs.PageBounds.Top,
+    $eventArgs.MarginBounds.Top - 10
+  )
+
   $centerFormat = New-Object System.Drawing.StringFormat
   $centerFormat.Alignment = [System.Drawing.StringAlignment]::Center
   $centerFormat.LineAlignment = [System.Drawing.StringAlignment]::Near
 
   $titleLayout = New-Object System.Drawing.RectangleF(
     $eventArgs.MarginBounds.Left,
-    $eventArgs.MarginBounds.Top,
+    $contentTop,
     $eventArgs.MarginBounds.Width,
     22
   )
@@ -68,7 +76,7 @@ $doc.add_PrintPage({
 
   $subtitleLayout = New-Object System.Drawing.RectangleF(
     $eventArgs.MarginBounds.Left,
-    $eventArgs.MarginBounds.Top + 23,
+    $contentTop + 23,
     $eventArgs.MarginBounds.Width,
     16
   )
@@ -77,7 +85,7 @@ $doc.add_PrintPage({
   # Draw each receipt row separately. Some thermal printer drivers clip a
   # multiline DrawString rectangle after a custom header, resulting in a
   # title-only receipt.
-  [single]$lineY = $eventArgs.MarginBounds.Top + $headerHeight
+  [single]$lineY = $contentTop + $headerHeight
   foreach ($line in $bodyLines) {
     $point = New-Object System.Drawing.PointF([single]$eventArgs.MarginBounds.Left, $lineY)
     $eventArgs.Graphics.DrawString($line, $font, $brush, $point)

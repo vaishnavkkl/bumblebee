@@ -28,6 +28,34 @@ const center = (value) => {
 
 const divider = () => '-'.repeat(RECEIPT_WIDTH);
 
+const formatReceiptDate = (value) => {
+  // mysql2 returns DATETIME/TIMESTAMP values as strings because dateStrings
+  // is enabled. They already represent Asia/Kolkata wall time, so parsing and
+  // timezone-converting them again would shift the printed time.
+  const match = String(value || '').match(
+    /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/
+  );
+  if (match) {
+    const [, year, month, day, rawHour, minute, second = '00'] = match;
+    const hour = Number(rawHour);
+    const period = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = String(hour % 12 || 12).padStart(2, '0');
+    return `${day}/${month}/${year}, ${displayHour}:${minute}:${second} ${period}`;
+  }
+
+  const date = value ? new Date(value) : new Date();
+  return date.toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  }).replace(/\b(am|pm)\b/i, period => period.toUpperCase());
+};
+
 const leftRight = (left, right) => {
   const leftText = clean(left);
   const rightText = clean(right);
@@ -61,7 +89,7 @@ function buildReceiptText(bill) {
   const lines = [
     divider(),
     leftRight('Bill No:', `#${bill.id}`),
-    leftRight('Date:', new Date(bill.created_at || Date.now()).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })),
+    leftRight('Printed:', formatReceiptDate()),
     leftRight('Vehicle:', bill.vehicle_number || 'N/A'),
   ];
 
