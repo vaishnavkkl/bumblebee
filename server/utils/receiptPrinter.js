@@ -59,8 +59,6 @@ function buildReceiptText(bill) {
     : Math.max(total - paid, 0);
 
   const lines = [
-    center('BUMBLEBEE'),
-    center('Premium Car Wash'),
     divider(),
     leftRight('Bill No:', `#${bill.id}`),
     leftRight('Date:', new Date(bill.created_at || Date.now()).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })),
