@@ -38,7 +38,7 @@ $font = New-Object System.Drawing.Font($fontName, 8, [System.Drawing.FontStyle]:
 $titleFont = New-Object System.Drawing.Font($fontName, 11, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Point)
 $subtitleFont = New-Object System.Drawing.Font($fontName, 8, [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Point)
 $brush = [System.Drawing.Brushes]::Black
-$margin = New-Object System.Drawing.Printing.Margins(6, 6, 4, 4)
+$margin = New-Object System.Drawing.Printing.Margins(6, 6, 0, 4)
 $doc.DefaultPageSettings.Margins = $margin
 
 # 80 mm is about 315 hundredths of an inch. Size the roll page to the receipt
