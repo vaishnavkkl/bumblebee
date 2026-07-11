@@ -87,6 +87,16 @@ if /I "%RUN_SCHEMA_SYNC%"=="Y" (
     echo Database schema is ready.
 )
 
+echo.
+echo Checking receipt printer...
+powershell -NoProfile -ExecutionPolicy Bypass -File "server\scripts\check-receipt-printer.ps1" -EnvPath "server\.env"
+if errorlevel 1 (
+    echo.
+    echo [WARNING] Receipt printer is not ready.
+    echo Printing will fail until the Gobbler thermal printer driver is installed
+    echo and either set as the Windows default printer or configured in server\.env.
+)
+
 set "START_MOBILE=N"
 if exist "bumblebee\package.json" (
     if exist "bumblebee\node_modules" (
@@ -100,6 +110,7 @@ echo.
 echo Backend:  http://localhost:5000
 echo Frontend: http://localhost:3000
 if /I "%START_MOBILE%"=="Y" echo Mobile:   Expo dev server window
+echo Printer:  Windows default or RECEIPT_PRINTER_NAME in server\.env
 echo.
 echo Login details:
 echo - Admin: admin@gmail.com / admin123

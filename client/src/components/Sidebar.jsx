@@ -15,7 +15,7 @@ export default function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
-        <div className="brand-icon">B</div>
+        <img className="brand-logo" src="/assets/logo.svg" alt="Bumblebee" />
         <div>
           <h1>Bumblebee</h1>
           <span>Car Wash Pro</span>

@@ -3,6 +3,13 @@ setlocal
 
 cd /d "%~dp0"
 
+node -v >nul 2>&1
+if errorlevel 1 (
+  echo [ERROR] Node.js is not installed. Please install Node.js first.
+  pause
+  exit /b 1
+)
+
 echo.
 echo Bumblebee database clear tool
 echo This clears transactional data from the current schema:
@@ -10,7 +17,7 @@ echo - bills, bill extra selections, payments, income, expenses
 echo - attendance, salary payments, and salary advances
 echo.
 echo It keeps users, vehicle types, services, extra services,
-echo workshops, and expense categories.
+echo workshops, expense categories, and server\.env settings.
 echo.
 echo Create a backup first if you need to keep historical data.
 echo.

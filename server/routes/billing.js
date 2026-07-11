@@ -8,6 +8,7 @@ router.get('/', auth, ctrl.getBills);
 router.put('/:id/details', auth, adminOnly, ctrl.updateBillDetails);
 router.put('/:id/status', auth, ctrl.updateWashStatus);
 router.put('/:id/payment-status', auth, ctrl.updatePaymentStatus);
+router.post('/:id/print', auth, ctrl.printBillReceipt);
 router.get('/payments', auth, ctrl.getPayments);
 router.delete('/payments/:id', auth, adminOnly, ctrl.deletePayment);
 router.get('/advance-payments', auth, ctrl.getAdvancePayments);

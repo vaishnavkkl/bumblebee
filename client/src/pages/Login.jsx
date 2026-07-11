@@ -33,7 +33,7 @@ export default function Login() {
           {theme === 'dark' ? <HiOutlineSun /> : <HiOutlineMoon />}
         </button>
         <div className="login-brand">
-          <div className="login-icon">B</div>
+          <img className="login-logo" src="/assets/logo.svg" alt="Bumblebee" />
           <h1>Bumblebee</h1>
           <p>Car Wash Management System</p>
         </div>

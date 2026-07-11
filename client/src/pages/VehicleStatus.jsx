@@ -7,6 +7,8 @@ import { BikeIcon, CarIcon, TruckIcon } from '../components/VehicleIcons';
 import { Spinner } from '../components/Loaders';
 import Pagination from '../components/Pagination';
 import { printBill } from '../utils/printBill';
+import { HiOutlinePrinter } from 'react-icons/hi';
+import { useLocation } from 'react-router-dom';
 
 const statusColors = { in_progress: 'badge-blue', completed: 'badge-green' };
 const statusLabels = { in_progress: 'In Progress', completed: 'Completed' };
@@ -29,11 +31,12 @@ const getPaymentBadge = (bill) => {
 export default function VehicleStatus() {
   const { confirm, danger } = useAlert();
   const { user } = useAuth();
+  const location = useLocation();
   const isAdmin = user?.role === 'admin';
   const [bills, setBills] = useState([]);
   const [loading, setLoading] = useState(false);
   const [updatingId, setUpdatingId] = useState(null);
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState(location.state?.focusStatus || 'all');
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
@@ -54,7 +57,14 @@ export default function VehicleStatus() {
       setTotal(r.data.total);
     } finally { setLoading(false); }
   };
-  useEffect(() => { load(); }, [filter, page, limit]);
+  useEffect(() => { load(); }, [filter, page, limit, location.state?.createdBillId]);
+
+  useEffect(() => {
+    if (location.state?.focusStatus) {
+      setFilter(location.state.focusStatus);
+      setPage(1);
+    }
+  }, [location.state?.focusStatus, location.state?.createdBillId]);
 
   const updateStatus = async (id, status, label) => {
     const ok = await confirm(`Mark this vehicle as "${label}"?`, { title: 'Update Status', confirmText: 'Update', variant: 'info', icon: '🚿' });
@@ -76,6 +86,18 @@ export default function VehicleStatus() {
   const closeCompletionModal = () => {
     setCompletionBill(null);
     setCompletionPayment({ payment_status: 'paid', payment_mode: 'cash', discount_amount: '', paid_amount: '' });
+  };
+
+  const handlePrintBill = async (bill) => {
+    setUpdatingId(bill.id);
+    try {
+      await printBill(bill.id);
+      toast.success('Receipt sent to printer');
+    } catch (err) {
+      toast.error(err.response?.data?.message || err.message || 'Failed to print receipt');
+    } finally {
+      setUpdatingId(null);
+    }
   };
 
   const openEditModal = async (bill) => {
@@ -138,21 +160,8 @@ export default function VehicleStatus() {
       return;
     }
     const paidAmount = paymentStatus === 'paid' ? completionAmountDue : paymentStatus === 'partial' ? partialPaidAmount : 0;
-    const balanceAmount = Math.max(completionAmountDue - paidAmount, 0);
     setUpdatingId(completionBill.id);
     try {
-      const completedBill = {
-        ...completionBill,
-        subtotal: completionSubtotal,
-        discount_amount: discount,
-        total_amount: completionAmountDue,
-        paid_amount: paidAmount,
-        balance_amount: balanceAmount,
-        payment_status: paymentStatus,
-        payment_mode: completionPayment.payment_mode,
-        wash_status: 'completed',
-        wash_completed_at: new Date().toISOString(),
-      };
       await api.put(`/billing/${completionBill.id}/status`, {
         status: 'completed',
         payment_status: paymentStatus,
@@ -160,15 +169,16 @@ export default function VehicleStatus() {
         discount_amount: discount,
         paid_amount: paidAmount,
       });
-      toast.success('Wash completed');
       closeCompletionModal();
-      const shouldPrint = await confirm('Wash completed. Do you want to print the final bill now?', {
-        title: 'Print Final Bill',
-        confirmText: 'Print',
-        variant: 'info',
-        icon: '🖨️',
-      });
-      if (shouldPrint) printBill(completedBill);
+      toast.success('Wash completed');
+
+      try {
+        await printBill(completionBill.id);
+        toast.success('Receipt sent to printer');
+      } catch (printErr) {
+        toast.error(printErr.response?.data?.message || printErr.message || 'Wash completed, but receipt printing failed');
+      }
+
       load();
     } catch {
       toast.error('Failed to complete wash');
@@ -180,6 +190,10 @@ export default function VehicleStatus() {
   const saveDetails = async (e) => {
     e.preventDefault();
     if (!editBill) return;
+    if (!editForm.vehicle_number.trim()) {
+      toast.error('Vehicle number is required');
+      return;
+    }
     const discount = Number(editForm.discount_amount) || 0;
     if (discount > editSubtotal) {
       toast.error('Discount cannot be more than the service total');
@@ -337,6 +351,11 @@ export default function VehicleStatus() {
                     </div>
                   )}
                   <div className="wash-card-secondary-actions">
+                    {b.wash_status === 'completed' && (
+                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => handlePrintBill(b)} disabled={updatingId === b.id}>
+                        {updatingId === b.id ? <><Spinner size={12} /> Printing...</> : <><HiOutlinePrinter /> Print</>}
+                      </button>
+                    )}
                     {isAdmin && b.wash_status === 'completed' && (
                       <button
                         className={`btn btn-secondary btn-sm ${updatingId === b.id ? 'loading' : ''}`}
@@ -367,80 +386,87 @@ export default function VehicleStatus() {
 
       {completionBill && (
         <div className="modal-overlay">
-          <form className="modal" onSubmit={completeWash}>
+          <form className="modal complete-wash-modal" onSubmit={completeWash}>
             <div className="modal-header">
               <h3>Complete Wash</h3>
               <button type="button" className="btn-icon" onClick={closeCompletionModal}>x</button>
             </div>
-            <div className="bill-summary" style={{ marginTop: 0, marginBottom: 20 }}>
-              <div className="bill-summary-row"><span>Vehicle</span><span>{completionBill.vehicle_number || 'No plate'}</span></div>
-              <div className="bill-summary-row"><span>Service</span><span>{completionBill.service_name}</span></div>
-              <div className="bill-summary-row"><span>Subtotal</span><span className="amount">Rs. {completionSubtotal.toLocaleString()}</span></div>
-              {completionDiscount > 0 && <div className="bill-summary-row"><span>Discount</span><span className="amount amount-red">-Rs. {completionDiscount.toLocaleString()}</span></div>}
-              <div className="bill-summary-row total"><span>Amount Due</span><span className="amount">Rs. {completionAmountDue.toLocaleString()}</span></div>
+            <div className="completion-action-bar">
+              <div className="completion-action-total">
+                <span>Amount Due</span>
+                <strong>Rs. {completionAmountDue.toLocaleString()}</strong>
+              </div>
+              <div className="completion-action-buttons">
+                <button type="button" className="btn btn-secondary" onClick={closeCompletionModal}>Cancel</button>
+                <button className={`btn btn-primary ${updatingId === completionBill.id ? 'loading' : ''}`} disabled={updatingId === completionBill.id}>
+                  {updatingId === completionBill.id ? <><Spinner size={14} /> Updating...</> : 'Complete Wash'}
+                </button>
+              </div>
+            </div>
+            <div className="completion-summary">
+              <div className="completion-summary-item"><span>Vehicle</span><strong>{completionBill.vehicle_number || 'No plate'}</strong></div>
+              <div className="completion-summary-item"><span>Service</span><strong>{completionBill.service_name}</strong></div>
+              <div className="completion-summary-item"><span>Subtotal</span><strong>Rs. {completionSubtotal.toLocaleString()}</strong></div>
+              {completionDiscount > 0 && <div className="completion-summary-item"><span>Discount</span><strong className="amount-red">-Rs. {completionDiscount.toLocaleString()}</strong></div>}
               {completionPayment.payment_status === 'partial' && (
                 <>
-                  <div className="bill-summary-row"><span>Paid Now</span><span className="amount amount-green">Rs. {completionPaidAmount.toLocaleString()}</span></div>
-                  <div className="bill-summary-row"><span>Pending Balance</span><span className="amount amount-red">Rs. {completionBalanceAmount.toLocaleString()}</span></div>
+                  <div className="completion-summary-item"><span>Paid Now</span><strong className="amount-green">Rs. {completionPaidAmount.toLocaleString()}</strong></div>
+                  <div className="completion-summary-item"><span>Pending</span><strong className="amount-red">Rs. {completionBalanceAmount.toLocaleString()}</strong></div>
                 </>
               )}
             </div>
-            <div className="form-group">
-              <label>Discount</label>
-              <input
-                type="number"
-                min="0"
-                max={completionSubtotal}
-                className="form-control"
-                placeholder="0"
-                value={completionPayment.discount_amount}
-                onChange={e => setCompletionPayment(prev => ({ ...prev, discount_amount: e.target.value }))}
-              />
-            </div>
-            <div className="form-group">
-              <label>Payment Status</label>
-              <select
-                className="form-control"
-                value={completionPayment.payment_status}
-                onChange={e => setCompletionPayment(prev => ({ ...prev, payment_status: e.target.value }))}
-              >
-                <option value="paid">Paid</option>
-                <option value="partial">Partial</option>
-                <option value="pending">Pending</option>
-              </select>
-            </div>
-            {completionPayment.payment_status === 'partial' && (
+            <div className="completion-field-grid">
               <div className="form-group">
-                <label>Paid Amount</label>
+                <label>Discount</label>
                 <input
                   type="number"
-                  min="1"
-                  max={Math.max(completionAmountDue - 1, 1)}
+                  min="0"
+                  max={completionSubtotal}
                   className="form-control"
-                  placeholder="Amount received"
-                  value={completionPayment.paid_amount}
-                  onChange={e => setCompletionPayment(prev => ({ ...prev, paid_amount: e.target.value }))}
+                  placeholder="0"
+                  value={completionPayment.discount_amount}
+                  onChange={e => setCompletionPayment(prev => ({ ...prev, discount_amount: e.target.value }))}
                 />
               </div>
-            )}
-            {completionPayment.payment_status !== 'pending' && (
               <div className="form-group">
-                <label>Payment Mode</label>
+                <label>Payment Status</label>
                 <select
                   className="form-control"
-                  value={completionPayment.payment_mode}
-                  onChange={e => setCompletionPayment(prev => ({ ...prev, payment_mode: e.target.value }))}
+                  value={completionPayment.payment_status}
+                  onChange={e => setCompletionPayment(prev => ({ ...prev, payment_status: e.target.value }))}
                 >
-                  <option value="cash">Cash (In Hand)</option>
-                  <option value="account">Account (Online)</option>
+                  <option value="paid">Paid</option>
+                  <option value="partial">Partial</option>
+                  <option value="pending">Pending</option>
                 </select>
               </div>
-            )}
-            <div className="modal-actions">
-              <button type="button" className="btn btn-secondary" onClick={closeCompletionModal}>Cancel</button>
-              <button className={`btn btn-primary ${updatingId === completionBill.id ? 'loading' : ''}`} disabled={updatingId === completionBill.id}>
-                {updatingId === completionBill.id ? <><Spinner size={14} /> Updating...</> : 'Complete Wash'}
-              </button>
+              {completionPayment.payment_status === 'partial' && (
+                <div className="form-group">
+                  <label>Paid Amount</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max={Math.max(completionAmountDue - 1, 1)}
+                    className="form-control"
+                    placeholder="Amount received"
+                    value={completionPayment.paid_amount}
+                    onChange={e => setCompletionPayment(prev => ({ ...prev, paid_amount: e.target.value }))}
+                  />
+                </div>
+              )}
+              {completionPayment.payment_status !== 'pending' && (
+                <div className="form-group">
+                  <label>Payment Mode</label>
+                  <select
+                    className="form-control"
+                    value={completionPayment.payment_mode}
+                    onChange={e => setCompletionPayment(prev => ({ ...prev, payment_mode: e.target.value }))}
+                  >
+                    <option value="cash">Cash (In Hand)</option>
+                    <option value="account">Account (Online)</option>
+                  </select>
+                </div>
+              )}
             </div>
           </form>
         </div>
@@ -467,6 +493,7 @@ export default function VehicleStatus() {
                 className="form-control"
                 value={editForm.vehicle_number}
                 onChange={e => setEditForm(prev => ({ ...prev, vehicle_number: e.target.value.toUpperCase() }))}
+                required
               />
             </div>
             <div className="form-group">

@@ -1,5 +1,6 @@
 const pool = require('../db');
 const { ensureWorkshopSchema } = require('./workshopController');
+const { printReceipt } = require('../utils/receiptPrinter');
 
 let discountColumnReady = false;
 let catalogActiveColumnsReady = false;
@@ -34,6 +35,34 @@ const parseAmount = (value, fallback = 0) => {
   if (!Number.isFinite(amount) || amount < 0) return fallback;
   return amount;
 };
+
+async function getBillForReceipt(billId) {
+  const [[bill]] = await pool.query(
+    `SELECT b.*, vt.label as vehicle_type, s.name as service_name, u.name as created_by_name, w.name as workshop_name
+     FROM bills b
+     JOIN vehicle_types vt ON b.vehicle_type_id = vt.id
+     JOIN services s ON b.service_id = s.id
+     JOIN users u ON b.created_by = u.id
+     LEFT JOIN workshops w ON b.workshop_id = w.id
+     WHERE b.id = ?`,
+    [billId]
+  );
+
+  if (!bill) return null;
+
+  const [extras] = await pool.query(
+    `SELECT MIN(be.extra_service_id) as extra_service_id, COALESCE(es.name, "Deleted Service") as name, be.price
+     FROM bill_extras be
+     LEFT JOIN extra_services es ON be.extra_service_id = es.id
+     WHERE be.bill_id = ?
+     GROUP BY COALESCE(es.name, "Deleted Service"), be.price
+     ORDER BY MIN(be.id)`,
+    [bill.id]
+  );
+  bill.extras = extras;
+
+  return bill;
+}
 
 async function applyCompletionDiscount(conn, billId, discountAmount) {
   const discount = parseAmount(discountAmount);
@@ -127,6 +156,12 @@ exports.createBill = async (req, res) => {
     await ensureWorkshopSchema(conn);
     await conn.beginTransaction();
     const { vehicle_type_id, vehicle_number, customer_mobile, workshop_id, service_id, extra_service_ids, created_by } = req.body;
+    const normalizedVehicleNumber = String(vehicle_number || '').trim();
+    if (!normalizedVehicleNumber) {
+      await conn.rollback();
+      return res.status(400).json({ message: 'Vehicle number is required' });
+    }
+
     const billedBy = created_by || req.user.id;
     // Store current catalog price on the bill so future catalog edits do not alter old bills.
     const [[service]] = await conn.query(`
@@ -170,7 +205,7 @@ exports.createBill = async (req, res) => {
     const [result] = await conn.query(
       `INSERT INTO bills (vehicle_type_id, vehicle_number, customer_mobile, workshop_id, service_id, service_price, discount_amount, total_amount, paid_amount, advance_amount, balance_amount, payment_mode, payment_status, wash_status, created_by)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, 'cash', 'pending', 'in_progress', ?)`,
-      [vehicle_type_id, vehicle_number, customer_mobile || null, selectedWorkshopId, service_id, service_price, 0, totalAmount, totalAmount, billedBy]
+      [vehicle_type_id, normalizedVehicleNumber, customer_mobile || null, selectedWorkshopId, service_id, service_price, 0, totalAmount, totalAmount, billedBy]
     );
 
     const billId = result.insertId;
@@ -309,6 +344,18 @@ exports.updatePaymentStatus = async (req, res) => {
   }
 };
 
+exports.printBillReceipt = async (req, res) => {
+  try {
+    const bill = await getBillForReceipt(req.params.id);
+    if (!bill) return res.status(404).json({ message: 'Bill not found' });
+
+    const result = await printReceipt(bill);
+    res.json({ message: 'Receipt sent to printer', printer: result.printerName });
+  } catch (err) {
+    res.status(500).json({ message: err.message || 'Failed to print receipt' });
+  }
+};
+
 exports.updateBillDetails = async (req, res) => {
   const conn = await pool.getConnection();
   try {
@@ -318,6 +365,11 @@ exports.updateBillDetails = async (req, res) => {
     const { vehicle_number, customer_mobile, discount_amount, service_id, extra_service_ids } = req.body;
     const billId = req.params.id;
     const discount = parseAmount(discount_amount);
+    const normalizedVehicleNumber = String(vehicle_number || '').trim();
+    if (!normalizedVehicleNumber) {
+      await conn.rollback();
+      return res.status(400).json({ message: 'Vehicle number is required' });
+    }
 
     const [[bill]] = await conn.query(`
       SELECT b.vehicle_type_id, b.service_id, b.service_price, b.paid_amount, b.advance_amount, COALESCE(SUM(be.price), 0) AS extras_total
@@ -398,7 +450,7 @@ exports.updateBillDetails = async (req, res) => {
            balance_amount = ?,
            payment_status = ?
        WHERE id = ?`,
-      [vehicle_number || null, customer_mobile || null, selectedServiceId, servicePrice, discount, totalAmount, balanceAmount, paymentStatus, billId]
+      [normalizedVehicleNumber, customer_mobile || null, selectedServiceId, servicePrice, discount, totalAmount, balanceAmount, paymentStatus, billId]
     );
 
     if (Array.isArray(extra_service_ids)) {

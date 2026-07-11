@@ -32,13 +32,20 @@ if errorlevel 1 (
 )
 echo.
 
-:: 2. Configure Database
-echo [STEP 1/7] Database Configuration
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$envPath = 'server\.env'; $saved = ''; $hasSaved = $false; if (Test-Path $envPath) { $lines = @(Get-Content -Path $envPath -ErrorAction Stop); for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i] -match '^DB_PASSWORD=(.*)$') { $saved = [string]$Matches[1]; $hasSaved = $true; if ($saved -eq '' -and ($i + 1) -lt $lines.Count -and $lines[$i + 1] -notmatch '^\s*$' -and $lines[$i + 1] -notmatch '=') { $saved = [string]$lines[$i + 1] }; break } } }; if ($env:BB_DB_PASS) { $dbPass = [string]$env:BB_DB_PASS; Write-Host 'Using MySQL root password from BB_DB_PASS.' } elseif ($hasSaved) { $dbPass = Read-Host 'Enter your MySQL root password [press Enter to keep saved]'; if ($dbPass -eq '') { $dbPass = $saved } } else { $dbPass = Read-Host 'Enter your MySQL root password' }; $dbPass = ([string]$dbPass) -replace '[\r\n]', ''; $content = @('DB_HOST=127.0.0.1','DB_PORT=3306','DB_USER=root',('DB_PASSWORD=' + $dbPass),'DB_NAME=bumblebee_db','JWT_SECRET=bumblebee_secret_key_2026','PORT=5000'); Set-Content -Path $envPath -Value $content -Encoding ASCII"
+:: 2. Configure Database and Receipt Printer
+echo [STEP 1/7] Database and Receipt Printer Configuration
+powershell -NoProfile -ExecutionPolicy Bypass -File "server\scripts\configure-env.ps1" -EnvPath "server\.env"
 if errorlevel 1 (
     echo [ERROR] Failed to write server\.env.
     pause
     exit /b 1
+)
+powershell -NoProfile -ExecutionPolicy Bypass -File "server\scripts\check-receipt-printer.ps1" -EnvPath "server\.env"
+if errorlevel 1 (
+    echo.
+    echo [WARNING] Receipt printer is not ready.
+    echo Install the Gobbler thermal printer driver and set it as the Windows default printer,
+    echo or rerun auto_setup.bat and enter the exact printer name.
 )
 echo.
 
@@ -142,6 +149,7 @@ echo   The app is now starting.
 echo   - Backend: http://localhost:5000
 echo   - Frontend: http://localhost:3000
 if /I "%START_MOBILE%"=="Y" echo   - Mobile: Expo dev server window
+echo   - Receipt printer: Windows default or RECEIPT_PRINTER_NAME in server\.env
 echo.
 echo   Login details:
 echo   - Admin: admin@gmail.com / admin123

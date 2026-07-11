@@ -3,13 +3,15 @@ import api from '../utils/api';
 import toast, { Toaster } from 'react-hot-toast';
 import { useAlert } from '../context/AlertContext';
 import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import { HiOutlineCheck } from 'react-icons/hi';
 import { BikeIcon, CarIcon, TruckIcon } from '../components/VehicleIcons';
 import { Spinner } from '../components/Loaders';
 
 export default function NewBill() {
-  const { alert: showAlert, success } = useAlert();
+  const { alert: showAlert, confirm } = useAlert();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [vehicleTypes, setVehicleTypes] = useState([]);
   const [services, setServices] = useState([]);
   const [extras, setExtras] = useState([]);
@@ -120,30 +122,38 @@ export default function NewBill() {
   const handleSubmit = async () => {
     if (!selectedVT || !selectedService) { showAlert('Please select a vehicle type and service.', { title: 'Missing Selection', icon: '🚗', variant: 'warning' }); return; }
     if (!createdBy) { showAlert('Please select who is creating this bill.', { title: 'Select User', icon: '👤', variant: 'warning' }); return; }
+    if (!vehicleNumber.trim()) { showAlert('Please enter the vehicle number.', { title: 'Vehicle Number Required', icon: '!', variant: 'warning' }); return; }
     setSubmitting(true);
     try {
       const response = await api.post('/billing', {
-        vehicle_type_id: selectedVT, vehicle_number: vehicleNumber,
+        vehicle_type_id: selectedVT, vehicle_number: vehicleNumber.trim(),
         customer_mobile: customerMobile,
         workshop_id: selectedWorkshop || null,
         service_id: selectedService, extra_service_ids: selectedExtras,
         created_by: createdBy,
       });
       toast.success('Bill created successfully!');
-      await success(
+      const goToWashStatus = await confirm(
         'Bill created and added to the wash queue. Complete the wash from Vehicle Status to record payment and print the final bill.',
-        { title: `Bill #${response.data.id} Created` }
+        {
+          title: `Bill #${response.data.id} Created`,
+          confirmText: 'Go to Wash Status',
+          cancelText: 'Stay Here',
+          variant: 'success',
+          icon: '✓',
+        }
       );
 
       setSelectedVT(null); setSelectedService(null); setSelectedExtras([]);
       setVehicleNumber(''); setCustomerMobile(''); setSelectedWorkshop(''); setCreatedBy(user?.id ? String(user.id) : '');
+      if (goToWashStatus) navigate('/vehicles/status', { state: { focusStatus: 'in_progress', createdBillId: response.data.id } });
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to create bill');
     } finally { setSubmitting(false); }
   };
 
   const handlePrintReceipt = (bill) => {
-    const printWindow = window.open('', '_blank', 'width=800,height=600');
+    return;
     
     let extrasHtml = '';
     if (bill.extras && bill.extras.length > 0) {
@@ -168,7 +178,7 @@ export default function NewBill() {
             .footer { text-align: center; margin-top: 20px; font-size: 10px; }
           </style>
         </head>
-        <body onload="window.print(); setTimeout(function(){ window.close(); }, 500);">
+        <body>
           <div class="header">
             <h2 style="margin:0;">BUMBLEBEE</h2>
             <p style="margin:0; font-size:12px;">Premium Car Wash</p>
@@ -293,7 +303,7 @@ export default function NewBill() {
             <div className="form-group">
               <label>Vehicle Number</label>
               <div style={{ position: 'relative' }}>
-                <input type="text" className="form-control" placeholder="KA-01-AB-1234" value={vehicleNumber} onChange={handleVehicleNumberChange} />
+                <input type="text" className="form-control" placeholder="KA-01-AB-1234" value={vehicleNumber} onChange={handleVehicleNumberChange} required />
               </div>
             </div>
             <div className="form-group">
