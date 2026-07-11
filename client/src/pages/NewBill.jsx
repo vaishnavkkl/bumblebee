@@ -5,7 +5,7 @@ import { useAlert } from '../context/AlertContext';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { HiOutlineCheck } from 'react-icons/hi';
-import { BikeIcon, CarIcon, TruckIcon } from '../components/VehicleIcons';
+import { AutoIcon, BikeIcon, CarIcon, TruckIcon } from '../components/VehicleIcons';
 import { Spinner } from '../components/Loaders';
 
 export default function NewBill() {
@@ -32,7 +32,7 @@ export default function NewBill() {
   const extrasSectionRef = useRef(null);
   const detailsSectionRef = useRef(null);
 
-  const vtComponents = { bike: BikeIcon, car: CarIcon, heavy: TruckIcon };
+  const vtComponents = { bike: BikeIcon, auto: AutoIcon, car: CarIcon, heavy: TruckIcon };
 
   const scrollToSection = (ref) => {
     window.setTimeout(() => {
@@ -63,13 +63,20 @@ export default function NewBill() {
 
   useEffect(() => {
     if (selectedVT) {
+      const controller = new AbortController();
       setLoadingServices(true);
-      api.get(`/vehicles/services?vehicleTypeId=${selectedVT}`)
+      api.get(`/vehicles/services?vehicleTypeId=${selectedVT}`, { signal: controller.signal })
         .then(r => setServices(r.data))
-        .finally(() => setLoadingServices(false));
+        .catch(err => {
+          if (err.code !== 'ERR_CANCELED') toast.error('Failed to load services');
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setLoadingServices(false);
+        });
       setSelectedService(null);
       setSelectedExtras([]);
       scrollToSection(serviceSectionRef);
+      return () => controller.abort();
     }
   }, [selectedVT]);
 
@@ -220,7 +227,7 @@ export default function NewBill() {
       <h3 className="section-title">1. Select Vehicle Type</h3>
       {loadingTypes ? (
         <div className="vehicle-type-grid">
-          {[0,1,2].map(i => (
+          {[0,1,2,3].map(i => (
             <div key={i} className="vehicle-type-card" style={{ minHeight: 180 }}>
               <div className="skeleton" style={{ height: 140, borderRadius: 10, marginBottom: 12 }} />
               <div className="skeleton" style={{ height: 16, width: '60%', margin: '0 auto' }} />

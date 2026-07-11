@@ -25,12 +25,14 @@ exports.getVehicleTypes = async (req, res) => {
         MIN(id) AS id,
         CASE normalized_name
           WHEN 'bike' THEN 'bike'
+          WHEN 'auto' THEN 'auto'
           WHEN 'car' THEN 'car'
           WHEN 'heavy' THEN 'heavy'
           ELSE normalized_name
         END AS name,
         CASE normalized_name
           WHEN 'bike' THEN 'Bike'
+          WHEN 'auto' THEN 'Auto'
           WHEN 'car' THEN 'Car'
           WHEN 'heavy' THEN 'Heavy Vehicle'
           ELSE MIN(TRIM(label))

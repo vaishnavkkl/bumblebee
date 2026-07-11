@@ -52,6 +52,8 @@ export default function CustomerAnalytics() {
   const [loading, setLoading] = useState(true);
   const [tableLoading, setTableLoading] = useState(false);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [tableRefresh, setTableRefresh] = useState(0);
   const [statusFilter, setStatusFilter] = useState('All');
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
@@ -83,21 +85,39 @@ export default function CustomerAnalytics() {
   };
 
   // Load paginated customer table
-  const loadTable = () => {
+  useEffect(() => { loadCharts(); }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(search.trim());
+      setPage(1);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    const controller = new AbortController();
     setTableLoading(true);
-    const params = new URLSearchParams({ page, limit, search, status: statusFilter });
-    api.get(`/analytics/customers?${params}`)
+    const params = new URLSearchParams({ page, limit, search: debouncedSearch, status: statusFilter });
+    api.get(`/analytics/customers?${params}`, { signal: controller.signal })
       .then(r => {
         setCustomers(r.data.data);
         setTotal(r.data.total);
       })
-      .finally(() => setTableLoading(false));
+      .catch(err => {
+        if (err.code !== 'ERR_CANCELED') console.error('Failed to load customers', err);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setTableLoading(false);
+      });
+    return () => controller.abort();
+  }, [page, limit, debouncedSearch, statusFilter, tableRefresh]);
+
+  const load = () => {
+    loadCharts();
+    setDebouncedSearch(search.trim());
+    setTableRefresh(value => value + 1);
   };
-
-  useEffect(() => { loadCharts(); }, []);
-  useEffect(() => { loadTable(); }, [page, limit, search, statusFilter]);
-
-  const load = () => { loadCharts(); loadTable(); };
 
   const getStatus = (lastVisit) => {
     const days = Math.floor((new Date() - new Date(lastVisit)) / 86400000);

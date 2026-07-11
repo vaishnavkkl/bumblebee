@@ -135,7 +135,7 @@ export default function ServiceCatalog() {
       <div className="page-header">
         <div>
           <h2>Service Catalog</h2>
-          <p>Add services for bike, car, and truck billing. Set the cost used on new bills.</p>
+          <p>Add services for bike, auto, car, and heavy vehicle billing. Set the cost used on new bills.</p>
         </div>
       </div>
 
@@ -240,6 +240,8 @@ export default function ServiceCatalog() {
                             type="number"
                             min="0"
                             step="0.01"
+                            inputMode="decimal"
+                            aria-label={`${service.name} cost`}
                             className="form-control catalog-price-input"
                             value={editingPrices[key] ?? service.price}
                             onChange={e => handlePriceChange(key, e.target.value)}
@@ -249,6 +251,7 @@ export default function ServiceCatalog() {
                             className="btn btn-secondary btn-sm"
                             onClick={() => handleUpdatePrice('service', service.id, service.price)}
                             disabled={saving}
+                            title={`Save ${service.name} cost`}
                           >
                             Save
                           </button>
@@ -257,6 +260,7 @@ export default function ServiceCatalog() {
                             className="btn btn-danger btn-sm"
                             onClick={() => handleDelete('service', service)}
                             disabled={saving}
+                            title={`Delete ${service.name}`}
                           >
                             Delete
                           </button>
@@ -285,6 +289,8 @@ export default function ServiceCatalog() {
                         type="number"
                         min="0"
                         step="0.01"
+                        inputMode="decimal"
+                        aria-label={`${extra.name} cost`}
                         className="form-control catalog-price-input"
                         value={editingPrices[key] ?? extra.price}
                         onChange={e => handlePriceChange(key, e.target.value)}
@@ -294,6 +300,7 @@ export default function ServiceCatalog() {
                         className="btn btn-secondary btn-sm"
                         onClick={() => handleUpdatePrice('extra', extra.id, extra.price)}
                         disabled={saving}
+                        title={`Save ${extra.name} cost`}
                       >
                         Save
                       </button>
@@ -302,6 +309,7 @@ export default function ServiceCatalog() {
                         className="btn btn-danger btn-sm"
                         onClick={() => handleDelete('extra', extra)}
                         disabled={saving}
+                        title={`Delete ${extra.name}`}
                       >
                         Delete
                       </button>

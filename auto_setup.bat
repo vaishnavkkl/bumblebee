@@ -76,7 +76,7 @@ if errorlevel 1 (
     exit /b 1
 ) else (
     echo [SUCCESS] Database schema and catalog are up to date.
-    echo [INFO] Synced workshops, customer mobiles, bill extras, discounts, payment status, expense categories, and salary advances.
+    echo [INFO] Synced Auto vehicle type and services, workshops, customer mobiles, bill extras, discounts, payment status, expense categories, and salary advances.
     if not exist "..\.tmp" mkdir "..\.tmp" >nul 2>&1
     powershell -NoProfile -ExecutionPolicy Bypass -Command "$files = @('schema.sql','setup.js'); Get-FileHash $files -Algorithm SHA256 | ForEach-Object { '{0}|{1}' -f $_.Path,$_.Hash } | Set-Content -Path '..\.tmp\server_schema_hash' -Encoding ASCII" >nul 2>&1
 )
@@ -150,6 +150,7 @@ echo   - Backend: http://localhost:5000
 echo   - Frontend: http://localhost:3000
 if /I "%START_MOBILE%"=="Y" echo   - Mobile: Expo dev server window
 echo   - Receipt printer: Windows default or RECEIPT_PRINTER_NAME in server\.env
+echo   - Vehicle catalog: Bike, Auto, Car, and Heavy Vehicle
 echo.
 echo   Login details:
 echo   - Admin: admin@gmail.com / admin123

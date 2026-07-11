@@ -20,7 +20,7 @@ export function SkeletonRow({ cols = 5 }) {
     <tr>
       {Array.from({ length: cols }).map((_, i) => (
         <td key={i}>
-          <div className="skeleton" style={{ height: 14, borderRadius: 6, width: `${60 + Math.random() * 30}%` }} />
+          <div className="skeleton" style={{ height: 14, borderRadius: 6, width: `${62 + (i * 11) % 29}%` }} />
         </td>
       ))}
     </tr>

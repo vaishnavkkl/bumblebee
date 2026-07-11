@@ -136,6 +136,7 @@ async function seedCatalog(conn) {
   await conn.query(`
     INSERT INTO vehicle_types (name, label) VALUES
       ('bike', 'Bike'),
+      ('auto', 'Auto'),
       ('car', 'Car'),
       ('heavy', 'Heavy Vehicle')
     ON DUPLICATE KEY UPDATE label = VALUES(label)
@@ -148,6 +149,9 @@ async function seedCatalog(conn) {
     ['bike', 'Water Wash', 200],
     ['bike', 'Foam Wash', 200],
     ['bike', 'Foam Wash + Lubing', 250],
+    ['auto', 'Body Wash', 350],
+    ['auto', 'Foam Wash', 550],
+    ['auto', 'Premium Wash', 600],
     ['car', 'Body Wash', 350],
     ['car', 'Foam Wash', 550],
     ['car', 'Premium Wash', 600],

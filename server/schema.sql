@@ -184,6 +184,7 @@ CREATE TABLE IF NOT EXISTS salary_payments (
 -- Seed vehicle types
 INSERT INTO vehicle_types (name, label) VALUES
   ('bike', 'Bike'),
+  ('auto', 'Auto'),
   ('car', 'Car'),
   ('heavy', 'Heavy Vehicle')
 ON DUPLICATE KEY UPDATE label = VALUES(label);
@@ -197,6 +198,15 @@ SELECT id, 'Foam Wash', 200 FROM vehicle_types WHERE name = 'bike'
 ON DUPLICATE KEY UPDATE price = VALUES(price);
 INSERT INTO services (vehicle_type_id, name, price)
 SELECT id, 'Foam Wash + Lubing', 250 FROM vehicle_types WHERE name = 'bike'
+ON DUPLICATE KEY UPDATE price = VALUES(price);
+INSERT INTO services (vehicle_type_id, name, price)
+SELECT id, 'Body Wash', 350 FROM vehicle_types WHERE name = 'auto'
+ON DUPLICATE KEY UPDATE price = VALUES(price);
+INSERT INTO services (vehicle_type_id, name, price)
+SELECT id, 'Foam Wash', 550 FROM vehicle_types WHERE name = 'auto'
+ON DUPLICATE KEY UPDATE price = VALUES(price);
+INSERT INTO services (vehicle_type_id, name, price)
+SELECT id, 'Premium Wash', 600 FROM vehicle_types WHERE name = 'auto'
 ON DUPLICATE KEY UPDATE price = VALUES(price);
 INSERT INTO services (vehicle_type_id, name, price)
 SELECT id, 'Body Wash', 350 FROM vehicle_types WHERE name = 'car'

@@ -60,32 +60,21 @@ if errorlevel 1 (
 )
 
 echo.
-set "RUN_SCHEMA_SYNC=N"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$files = @('server\schema.sql','server\setup.js'); if (!(Test-Path '.tmp\server_schema_hash')) { exit 1 }; $saved = Get-Content '.tmp\server_schema_hash' -ErrorAction Stop; $current = Get-FileHash $files -Algorithm SHA256 | ForEach-Object { '{0}|{1}' -f $_.Path,$_.Hash }; if (Compare-Object $saved $current) { exit 1 } else { exit 0 }" >nul 2>&1
+echo Syncing database schema and vehicle catalog...
+pushd server
+node setup.js
 if errorlevel 1 (
-    echo Database schema setup has not been recorded for this app version.
-    echo Choose Y after installing an update that changed database features.
-    set /p RUN_SCHEMA_SYNC="Run database schema update now? (Y/N): "
-)
-
-if /I "%RUN_SCHEMA_SYNC%"=="Y" (
     echo.
-    echo Syncing database schema and catalog...
-    pushd server
-    node setup.js
-    if errorlevel 1 (
-        echo.
-        echo [ERROR] Database schema sync failed.
-        echo Check server\.env, confirm MySQL is running, then try again.
-        popd
-        pause
-        exit /b 1
-    )
-    if not exist "..\.tmp" mkdir "..\.tmp" >nul 2>&1
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "$files = @('schema.sql','setup.js'); Get-FileHash $files -Algorithm SHA256 | ForEach-Object { '{0}|{1}' -f $_.Path,$_.Hash } | Set-Content -Path '..\.tmp\server_schema_hash' -Encoding ASCII" >nul 2>&1
+    echo [ERROR] Database schema sync failed.
+    echo Check server\.env, confirm MySQL is running, then try again.
     popd
-    echo Database schema is ready.
+    pause
+    exit /b 1
 )
+if not exist "..\.tmp" mkdir "..\.tmp" >nul 2>&1
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$files = @('schema.sql','setup.js'); Get-FileHash $files -Algorithm SHA256 | ForEach-Object { '{0}|{1}' -f $_.Path,$_.Hash } | Set-Content -Path '..\.tmp\server_schema_hash' -Encoding ASCII" >nul 2>&1
+popd
+echo Database schema and Bike, Auto, Car, and Heavy Vehicle catalogs are ready.
 
 echo.
 echo Checking receipt printer...

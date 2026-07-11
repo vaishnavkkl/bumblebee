@@ -21,3 +21,7 @@ export function CarIcon({ mini }) {
 export function TruckIcon({ mini }) {
   return <VehicleImage src="/assets/car.png" alt="Heavy Vehicle" mini={mini} />;
 }
+
+export function AutoIcon({ mini }) {
+  return <VehicleImage src="/assets/Auto.png" alt="Auto" mini={mini} />;
+}

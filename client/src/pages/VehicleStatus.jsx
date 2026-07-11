@@ -3,7 +3,7 @@ import api from '../utils/api';
 import toast, { Toaster } from 'react-hot-toast';
 import { useAlert } from '../context/AlertContext';
 import { useAuth } from '../context/AuthContext';
-import { BikeIcon, CarIcon, TruckIcon } from '../components/VehicleIcons';
+import { AutoIcon, BikeIcon, CarIcon, TruckIcon } from '../components/VehicleIcons';
 import { Spinner } from '../components/Loaders';
 import Pagination from '../components/Pagination';
 import { printBill } from '../utils/printBill';
@@ -13,7 +13,7 @@ import { useLocation } from 'react-router-dom';
 const statusColors = { in_progress: 'badge-blue', completed: 'badge-green' };
 const statusLabels = { in_progress: 'In Progress', completed: 'Completed' };
 const nextStatus = { in_progress: 'completed' };
-const vtMiniIcon = { Bike: BikeIcon, Car: CarIcon, 'Heavy Vehicle': TruckIcon };
+const vtMiniIcon = { Bike: BikeIcon, Auto: AutoIcon, Car: CarIcon, 'Heavy Vehicle': TruckIcon };
 
 const getPaymentLabel = (bill) => {
   if (bill.payment_status === 'paid') return 'Paid';

@@ -18,6 +18,7 @@ echo - attendance, salary payments, and salary advances
 echo.
 echo It keeps users, vehicle types, services, extra services,
 echo workshops, expense categories, and server\.env settings.
+echo The latest schema and Auto vehicle catalog are synchronized first.
 echo.
 echo Create a backup first if you need to keep historical data.
 echo.
@@ -41,14 +42,33 @@ if not exist "server\node_modules" (
   exit /b 1
 )
 
-node server\clear_database.js
+echo.
+echo Synchronizing current database schema and vehicle catalog...
+pushd server
+node setup.js
+if errorlevel 1 (
+  echo.
+  echo Database schema sync failed. Nothing was cleared.
+  popd
+  pause
+  exit /b 1
+)
+
+echo.
+echo Clearing transactional data...
+node clear_database.js
 set EXIT_CODE=%ERRORLEVEL%
+if "%EXIT_CODE%"=="0" (
+  if not exist "..\.tmp" mkdir "..\.tmp" >nul 2>&1
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "$files = @('schema.sql','setup.js'); Get-FileHash $files -Algorithm SHA256 | ForEach-Object { '{0}|{1}' -f $_.Path,$_.Hash } | Set-Content -Path '..\.tmp\server_schema_hash' -Encoding ASCII" >nul 2>&1
+)
+popd
 
 echo.
 if not "%EXIT_CODE%"=="0" (
   echo Database clear failed.
 ) else (
-  echo Database clear completed.
+  echo Database clear completed. The Auto vehicle catalog was preserved.
 )
 pause
 exit /b %EXIT_CODE%
