@@ -34,15 +34,16 @@ $fontName = 'Consolas'
 if (-not ([System.Drawing.FontFamily]::Families | Where-Object { $_.Name -eq $fontName })) {
   $fontName = 'Courier New'
 }
-$font = New-Object System.Drawing.Font($fontName, 9, [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Point)
+$font = New-Object System.Drawing.Font($fontName, 8, [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Point)
 $brush = [System.Drawing.Brushes]::Black
-$margin = New-Object System.Drawing.Printing.Margins(4, 4, 4, 4)
+$margin = New-Object System.Drawing.Printing.Margins(6, 6, 4, 4)
 $doc.DefaultPageSettings.Margins = $margin
 
-# 80mm is about 315 hundredths of an inch. Use a tall roll-paper page so
-# Windows sends one continuous receipt to the thermal printer driver.
+# 80 mm is about 315 hundredths of an inch. Size the roll page to the receipt
+# content so the printer cuts after the bill instead of feeding a long blank
+# section. The 8 pt monospace font uses roughly 15 hundredths per text line.
 $lineCount = ($text -split "(`r`n|`n|`r)").Count
-$height = [Math]::Max(500, [Math]::Min(2200, 120 + ($lineCount * 18)))
+$height = [Math]::Max(180, [Math]::Min(1400, 35 + ($lineCount * 15)))
 $paperSize = New-Object System.Drawing.Printing.PaperSize('Receipt 80mm', 315, $height)
 $doc.DefaultPageSettings.PaperSize = $paperSize
 
@@ -57,8 +58,8 @@ $doc.add_PrintPage({
   )
 
   $format = New-Object System.Drawing.StringFormat
-  $format.Trimming = [System.Drawing.StringTrimming]::Word
-  $format.FormatFlags = [System.Drawing.StringFormatFlags]::LineLimit
+  $format.Trimming = [System.Drawing.StringTrimming]::None
+  $format.FormatFlags = [System.Drawing.StringFormatFlags]::NoWrap
 
   $eventArgs.Graphics.DrawString($text, $font, $brush, $layout, $format)
   $eventArgs.HasMorePages = $false

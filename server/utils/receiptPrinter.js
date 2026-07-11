@@ -3,7 +3,9 @@ const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
 
-const RECEIPT_WIDTH = 42;
+// Forty monospace characters fit safely inside the printable area of an
+// 80 mm roll, including printers that reserve a few millimetres at each edge.
+const RECEIPT_WIDTH = 40;
 
 const toNumber = (value) => {
   const amount = Number(value);
@@ -47,6 +49,14 @@ function buildReceiptText(bill) {
   const subtotal = bill.subtotal != null
     ? toNumber(bill.subtotal)
     : toNumber(bill.service_price) + extrasTotal;
+  const discount = toNumber(bill.discount_amount);
+  const total = bill.total_amount != null
+    ? toNumber(bill.total_amount)
+    : Math.max(subtotal - discount, 0);
+  const paid = toNumber(bill.paid_amount) + toNumber(bill.advance_amount);
+  const balance = bill.balance_amount != null
+    ? toNumber(bill.balance_amount)
+    : Math.max(total - paid, 0);
 
   const lines = [
     center('BUMBLEBEE'),
@@ -76,13 +86,16 @@ function buildReceiptText(bill) {
     leftRight('Subtotal:', `Rs. ${formatAmount(subtotal)}`)
   );
 
-  if (toNumber(bill.discount_amount) > 0) {
-    lines.push(leftRight('Discount:', `-Rs. ${formatAmount(bill.discount_amount)}`));
+  if (discount > 0) {
+    lines.push(leftRight('Discount:', `-Rs. ${formatAmount(discount)}`));
   }
 
-  lines.push(leftRight('Total:', `Rs. ${formatAmount(bill.total_amount)}`));
-  if (toNumber(bill.paid_amount) > 0) lines.push(leftRight('Paid:', `Rs. ${formatAmount(bill.paid_amount)}`));
-  if (toNumber(bill.balance_amount) > 0) lines.push(leftRight('Balance:', `Rs. ${formatAmount(bill.balance_amount)}`));
+  lines.push(
+    divider(),
+    leftRight('TOTAL AMOUNT:', `Rs. ${formatAmount(total)}`),
+    leftRight('PAID:', `Rs. ${formatAmount(paid)}`),
+    leftRight('BALANCE:', `Rs. ${formatAmount(balance)}`)
+  );
   lines.push(leftRight('Status:', paymentLabel(bill)));
 
   lines.push(
